@@ -1,0 +1,48 @@
+name: 조석 데이터 갱신
+
+on:
+  schedule:
+    - cron: '30 18 * * *'   # 매일 KST 03:30 (UTC 18:30)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-tides
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 조석 데이터 수집
+        env:
+          TIDE_API_KEY: ${{ secrets.TIDE_API_KEY }}
+        run: node tools/fetch_tides.mjs
+
+      - name: 변경 사항 커밋
+        run: |
+          if [ -z "$(git status --porcelain data/)" ]; then
+            echo "변경 없음"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git commit -m "조석 데이터 갱신 $(TZ=Asia/Seoul date +%Y-%m-%d)"
+          if git ls-remote --exit-code --heads origin "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
+            if ! git pull --rebase origin "${GITHUB_REF_NAME}"; then
+              echo "rebase 충돌: 중단하고 실패 처리"
+              git rebase --abort || true
+              exit 1
+            fi
+          fi
+          git push
