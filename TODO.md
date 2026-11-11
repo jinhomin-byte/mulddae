@@ -2,6 +2,12 @@
 
 ## 방향: GitHub Actions 사전 수집 + 정적 JSON 호스팅 (API 호출은 서버 쪽 하루 1회, 앱은 JSON만 받음)
 
+## 현재 상태 (2026-11-11 퇴근 시점)
+- 완료: API 검증, 수집 스크립트(tools/fetch_tides.mjs) 작성·검증, 워크플로 작성, git init + 첫 커밋, GitHub 공개 저장소(jinhomin-byte/mulddae) 푸시, Secret(TIDE_API_KEY)·쓰기 권한 설정, 첫 수동 실행 시작
+- 진행 중: 첫 Actions 실행(최대 8,000호출) → 이후 매일 KST 03:30 자동 이어받기(백필 약 8일)
+- 내일 확인: Actions 초록 체크, data/ 폴더·index.json 생성, 새벽 자동 실행 성공 여부
+- 다음: 4단계 앱 수정 (API 직접 호출 → 정적 JSON), 출처표시 문구 확정 후 앱·README 반영
+
 ## 0. 결정/준비 (사용자)
 - [ ] 공공데이터포털 조석예보 API 활용신청, 인증키 발급
 - [x] GitHub 저장소: 공개로 결정 (인증키는 Secret에만 보관)

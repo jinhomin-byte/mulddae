@@ -31,6 +31,9 @@ TIDE_API_KEY=발급키 STATIONS=DT_0001 DAYS=3 node tools/fetch_tides.mjs
 ```
 `TIDE_API_KEY`를 생략하면 프로젝트 루트 `local.properties`의 `TIDE_API_KEY` 줄을 읽는다. 그 외 환경변수: `MAX_CALLS`(기본 8000), `STATIONS`(쉼표 구분 코드), `DAYS`(기본 365).
 
+## 데이터 검증
+`node tools/validate_data.mjs` (오류가 있으면 종료코드 1, 워크플로에서도 커밋 전에 실행)
+
 ## 출처 표시 (공공저작물)
 출처: 해양수산부 국립해양조사원, 조석예보(고, 저조) (공공데이터포털, data.go.kr)
 
