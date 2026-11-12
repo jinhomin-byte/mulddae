@@ -259,6 +259,10 @@ function applyItems(task, items) {
     rows.push([m[2], v, se === '1' || se === '3' ? 'H' : 'L']);
   }
   if (rows.length === 0) return false;
+  if (rows.length > 6) {
+    console.error(`경고: ${task.code} ${task.date} 하루 ${rows.length}건(1~6건 아님) - 저장하지 않음`);
+    return false;
+  }
   rows.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   obj.days[task.date] = rows;
   dirty.add(`${task.code}/${year}`);
