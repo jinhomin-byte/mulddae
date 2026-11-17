@@ -21,6 +21,9 @@
 
 항목은 `[시각(HH:mm, KST), 조위(cm), "H"(고조) 또는 "L"(저조)]`이며 하루 안에서 시각순이다. `index.json`은 `{"updated","source","stations":[{"code","name","lat","lot","firstDate","lastDate"}]}` 형태이고, 아직 데이터가 없는 관측소는 lat/lot/firstDate/lastDate가 null이다.
 
+## 실측 데이터 (수온 등)
+조위관측소 실측값(수온, 기온, 풍속, 최대순간풍속, 풍향, 염분)을 GitHub Actions로 매시 정각에 수집해 `data/obs/`에 저장한다(`tools/fetch_obs.mjs`, `tools/obs_stations.csv` 66곳, `.github/workflows/update-obs.yml`). `data/obs/<관측소코드>/<YYYY-MM>.json`은 `{"obs":{"날짜":{"HH:00":[값...]}}}` 형태의 정시 값이고 값 순서는 `data/obs/index.json`의 `fields`를 따른다(값이 없으면 null). 항상 최근 365일만 보관하고 그보다 오래된 데이터는 지운다. 출처: 해양수산부 국립해양조사원, 조위관측소 최신 관측데이터 (공공데이터포털). 공공누리 제1유형(출처표시)에 따라 이용한다.
+
 ## 정적 URL
 - `https://raw.githubusercontent.com/<USER>/<REPO>/main/data/index.json`
 - `https://raw.githubusercontent.com/<USER>/<REPO>/main/data/<관측소코드>/<연도>.json`

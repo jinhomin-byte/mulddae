@@ -20,9 +20,13 @@ function err(file, reason) {
   errorCount++;
   if (shown.length < MAX_SHOW) shown.push(`${file}: ${reason}`);
 }
-function warn() {
+const warnShown = [];
+function warn(msg) {
   warnCount++;
+  if (msg && warnShown.length < MAX_SHOW) warnShown.push(msg);
 }
+// 'obs' 인자: 실측 데이터(data/obs)만 검사. 인자 없으면 전체.
+const ONLY_OBS = process.argv[2] === 'obs';
 
 const isStr = (v) => typeof v === 'string' && v.trim() !== '';
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -47,6 +51,8 @@ function readJson(p, rel) {
 function finish() {
   console.log('--- 데이터 검증 요약 ---');
   console.log(`검사한 파일: ${fileCount}, 날짜: ${dayCount}, 오류: ${errorCount}, 경고: ${warnCount}`);
+  for (const s of warnShown) console.log(`경고: ${s}`);
+  if (warnCount > warnShown.length && warnShown.length > 0) console.log(`... 경고 외 ${warnCount - warnShown.length}건`);
   if (errorCount > 0) {
     for (const s of shown) console.error(s);
     if (errorCount > shown.length) console.error(`... 외 ${errorCount - shown.length}건`);
@@ -79,7 +85,9 @@ function __dirname_() {
 // ---------- index.json ----------
 const range = new Map(); // code -> {firstDate, lastDate}
 const indexPath = path.join(DATA_DIR, 'index.json');
-if (!fs.existsSync(indexPath)) {
+if (ONLY_OBS) {
+  // 조석 index 검사 생략
+} else if (!fs.existsSync(indexPath)) {
   err('data/index.json', '파일 없음');
 } else {
   fileCount++;
@@ -132,6 +140,7 @@ if (!fs.existsSync(indexPath)) {
 // ---------- 관측소별 연도 파일 ----------
 const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
 for (const code of fs.readdirSync(DATA_DIR).sort()) {
+  if (code === 'obs' || ONLY_OBS) continue; // 실측 데이터는 아래에서 따로 검사
   const dir = path.join(DATA_DIR, code);
   if (!fs.statSync(dir).isDirectory()) continue;
   for (const fname of fs.readdirSync(dir).sort()) {
@@ -182,6 +191,106 @@ for (const code of fs.readdirSync(DATA_DIR).sort()) {
         if (prevT !== null && row[0] < prevT) err(rel, `${date}: 시각순 정렬 위반 (${prevT} 다음 ${row[0]})`);
         prevT = row[0];
         if (row[1] < MIN_CM || row[1] > MAX_CM) warn();
+      }
+    }
+  }
+}
+
+// ---------- data/obs (실측) ----------
+const OBS_DIR = path.join(DATA_DIR, 'obs');
+const OBS_FIELDS = ['wtem', 'artmp', 'wspd', 'maxMmntWspd', 'wndrct', 'slntQty'];
+const OBS_RANGE = [[-5, 40], [-40, 50], [0, 80], [0, 100], [0, 360], [0, 50]];
+const OBS_KEEP_DAYS = 365;
+const OBS_GRACE_DAYS = 1; // 수집(정리)과 검증 시각 차이 여유
+const kstToday = new Date(Date.now() + 9 * 3600 * 1000);
+const dayStr = (offset) => {
+  const d = new Date(Date.UTC(kstToday.getUTCFullYear(), kstToday.getUTCMonth(), kstToday.getUTCDate() + offset));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+};
+const obsOldest = dayStr(-(OBS_KEEP_DAYS + OBS_GRACE_DAYS));
+const obsNewest = dayStr(1);
+const obsTimeRe = /^([01]\d|2[0-3]):00$/;
+
+if (fs.existsSync(OBS_DIR)) {
+  const f = 'data/obs/index.json';
+  const obsIdxPath = path.join(OBS_DIR, 'index.json');
+  if (!fs.existsSync(obsIdxPath)) {
+    err(f, '파일 없음');
+  } else {
+    fileCount++;
+    const idx = readJson(obsIdxPath, f);
+    if (idx !== undefined) {
+      if (!isObj(idx)) {
+        err(f, '최상위가 객체가 아님');
+      } else {
+        if (!isStr(idx.updated) || Number.isNaN(Date.parse(idx.updated))) err(f, 'updated 가 ISO8601 형식이 아님');
+        if (!isStr(idx.source)) err(f, 'source 문구 없음');
+        if (JSON.stringify(idx.fields) !== JSON.stringify(OBS_FIELDS)) err(f, `fields 가 ${OBS_FIELDS.join(',')} 가 아님`);
+        if (!Array.isArray(idx.stations)) {
+          err(f, 'stations 배열 없음');
+        } else {
+          const seen = new Set();
+          for (const st of idx.stations) {
+            if (!isObj(st) || !isStr(st.code)) {
+              err(f, 'stations 항목에 code 없음');
+              continue;
+            }
+            if (seen.has(st.code)) err(f, `코드 중복: ${st.code}`);
+            seen.add(st.code);
+            if (!isStr(st.name)) err(f, `${st.code}: name 형식 오류`);
+            if (!isNum(st.lat) || !isNum(st.lot)) err(f, `${st.code}: lat/lot 형식 오류`);
+            if (st.lastTime !== null && !(typeof st.lastTime === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:00$/.test(st.lastTime) && validDate(st.lastTime.slice(0, 10)))) {
+              err(f, `${st.code}: lastTime 형식 오류`);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  for (const code of fs.readdirSync(OBS_DIR).sort()) {
+    const dir = path.join(OBS_DIR, code);
+    if (!fs.statSync(dir).isDirectory()) continue;
+    for (const fname of fs.readdirSync(dir).sort()) {
+      const rel = `data/obs/${code}/${fname}`;
+      const fm = fname.match(/^(\d{4}-\d{2})\.json$/);
+      if (!fm) {
+        err(rel, '파일 이름이 <YYYY-MM>.json 형식이 아님');
+        continue;
+      }
+      fileCount++;
+      const obj = readJson(path.join(dir, fname), rel);
+      if (obj === undefined) continue;
+      if (!isObj(obj) || !isObj(obj.obs)) {
+        err(rel, 'obs 객체 없음');
+        continue;
+      }
+      for (const [date, times] of Object.entries(obj.obs)) {
+        dayCount++;
+        if (!validDate(date)) {
+          err(rel, `날짜 키 형식 오류: ${date}`);
+          continue;
+        }
+        if (date.slice(0, 7) !== fm[1]) err(rel, `${date} 가 파일 월(${fm[1]})과 다름`);
+        if (date < obsOldest) err(rel, `${date} 가 보관 기간(${OBS_KEEP_DAYS}일)을 넘음`);
+        if (date > obsNewest) err(rel, `${date} 가 미래 날짜임`);
+        if (!isObj(times) || Object.keys(times).length === 0) {
+          err(rel, `${date}: 시각 항목이 비어 있음`);
+          continue;
+        }
+        for (const [t, row] of Object.entries(times)) {
+          if (!obsTimeRe.test(t)) {
+            err(rel, `${date}: 시각이 정시(HH:00)가 아님 ${t}`);
+            continue;
+          }
+          if (!Array.isArray(row) || row.length !== OBS_FIELDS.length || !row.every((v) => v === null || isNum(v))) {
+            err(rel, `${date} ${t}: 항목 형식 오류 ${JSON.stringify(row)}`);
+            continue;
+          }
+          row.forEach((v, i) => {
+            if (v !== null && (v < OBS_RANGE[i][0] || v > OBS_RANGE[i][1])) warn(`${code} ${date} ${t} ${OBS_FIELDS[i]}=${v} (범위 ${OBS_RANGE[i][0]}~${OBS_RANGE[i][1]})`);
+          });
+        }
       }
     }
   }

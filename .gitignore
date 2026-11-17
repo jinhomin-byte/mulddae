@@ -16,3 +16,7 @@ secrets.properties
 # 개인 작업용/재배포 제외
 claude-project-setup.zip
 *.hwpx
+*.hwp
+*.zip
+공공누리1유형마크원본/
+공공저작물게시판적용맞춤파일/

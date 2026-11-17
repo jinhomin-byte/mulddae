@@ -1,0 +1,60 @@
+name: 실측 데이터 갱신
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # 매시 정각 (UTC 기준 매시 = KST 매시)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-obs
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 실측 데이터 수집
+        env:
+          TIDE_API_KEY: ${{ secrets.TIDE_API_KEY }}
+        run: node tools/fetch_obs.mjs
+
+      - name: 데이터 형식 검증
+        run: node tools/validate_data.mjs obs
+
+      - name: 변경 사항 커밋
+        run: |
+          if [ -z "$(git status --porcelain data/obs/)" ]; then
+            echo "변경 없음"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/obs/
+          git commit -m "실측 데이터 갱신 $(TZ=Asia/Seoul date '+%Y-%m-%d %H')시"
+          # 조석 수집 워크플로와 동시에 push 할 수 있으므로 rebase 후 push, 실패 시 재시도
+          for i in 1 2 3 4 5; do
+            if git ls-remote --exit-code --heads origin "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
+              if ! git pull --rebase origin "${GITHUB_REF_NAME}"; then
+                echo "rebase 충돌: 중단하고 실패 처리"
+                git rebase --abort || true
+                exit 1
+              fi
+            fi
+            if git push; then
+              exit 0
+            fi
+            echo "push 실패, 재시도 ($i/5)"
+            sleep $((i * 5))
+          done
+          echo "push 5회 실패"
+          exit 1
