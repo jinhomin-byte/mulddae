@@ -91,7 +91,7 @@ class TideWidgetReceiver : GlanceAppWidgetReceiver() {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             "tide_widget_refresh",
             ExistingPeriodicWorkPolicy.KEEP,
-            PeriodicWorkRequestBuilder<WidgetRefreshWorker>(3, TimeUnit.HOURS).build()
+            PeriodicWorkRequestBuilder<WidgetRefreshWorker>(24, TimeUnit.HOURS).build()
         )
     }
 
@@ -103,7 +103,12 @@ class TideWidgetReceiver : GlanceAppWidgetReceiver() {
 
 class WidgetRefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
+        // 하루 1회: 오늘 연도 파일을 새로 받아 캐시 갱신 (실패해도 캐시로 위젯 갱신)
+        val r = TideRepository.load(
+            applicationContext, TideRepository.selectedStation(applicationContext), LocalDate.now(), force = true
+        )
+        val failed = r.isFailure || TideRepository.lastDownloadFailed
         TideWidget().updateAll(applicationContext)
-        return Result.success()
+        return if (failed) Result.retry() else Result.success()
     }
 }

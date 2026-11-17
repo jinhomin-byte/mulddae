@@ -1,14 +1,7 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-}
-
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -21,12 +14,10 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
-        buildConfigField("String", "TIDE_API_KEY", "\"${localProps.getProperty("TIDE_API_KEY", "")}\"")
     }
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     compileOptions {

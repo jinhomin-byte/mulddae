@@ -9,24 +9,8 @@ import java.util.Date
 
 data class Station(val name: String, val code: String)
 
-/**
- * 국립해양조사원 조위관측소 코드.
- * TODO: 코드는 data.go.kr 활용가이드/바다누리 관측소 목록과 대조해서 확인할 것.
- */
-val STATIONS = listOf(
-    Station("인천", "DT_0001"),
-    Station("평택", "DT_0002"),
-    Station("영광", "DT_0003"),
-    Station("제주", "DT_0004"),
-    Station("부산", "DT_0005"),
-    Station("묵호", "DT_0006"),
-    Station("목포", "DT_0007"),
-    Station("안산", "DT_0008"),
-    Station("포항", "DT_0011"),
-    Station("속초", "DT_0013"),
-    Station("여수", "DT_0016"),
-    Station("군산", "DT_0018"),
-)
+/** 관측소 목록은 GitHub data/index.json 에서 받는다 (TideRepository.loadStations). */
+val DEFAULT_STATION = Station("인천", "DT_0001")
 
 data class TideEvent(val time: LocalDateTime, val high: Boolean, val heightCm: Int)
 

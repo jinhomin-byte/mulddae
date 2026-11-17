@@ -38,12 +38,40 @@ fun TideScreen() {
     var loading by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var tick by remember { mutableIntStateOf(0) }
+    var stations by remember { mutableStateOf(listOf(station)) }
+
+    var stationsFailed by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+
+    // 관측소 목록 로드. 새로고침(tick)을 누르면 실패했을 때 다시 시도한다.
+    LaunchedEffect(tick) {
+        TideRepository.loadStations(ctx).onSuccess { list ->
+            stationsFailed = false
+            if (list.isNotEmpty()) {
+                stations = list
+                val found = list.firstOrNull { it.code == station.code }
+                if (found == null) {
+                    // 저장된 관측소가 목록에 없으면 기본(인천)으로 되돌린다.
+                    val def = list.firstOrNull { it.code == DEFAULT_STATION.code } ?: DEFAULT_STATION
+                    station = def
+                    TideRepository.selectStation(ctx, def)
+                } else if (found.name != station.name) {
+                    station = found
+                    TideRepository.selectStation(ctx, found)
+                }
+            }
+        }.onFailure { stationsFailed = true }
+    }
 
     LaunchedEffect(station, date, tick) {
         loading = true
+        notice = null
         val r = TideRepository.load(ctx, station, date, force = tick > 0)
         events = r.getOrDefault(emptyList())
         error = r.exceptionOrNull()?.message
+        if (r.isSuccess && tick > 0 && TideRepository.lastDownloadFailed) {
+            notice = "새로고침 실패, 저장된 데이터 표시"
+        }
         loading = false
         if (r.isSuccess) TideWidget().updateAll(ctx)
     }
@@ -55,7 +83,7 @@ fun TideScreen() {
         Box {
             OutlinedButton(onClick = { menu = true }) { Text("관측소: ${station.name}") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                STATIONS.forEach { s ->
+                stations.forEach { s ->
                     DropdownMenuItem(text = { Text(s.name) }, onClick = {
                         menu = false
                         station = s
@@ -85,10 +113,15 @@ fun TideScreen() {
             Button(onClick = { tick++ }, enabled = !loading) { Text("새로고침") }
         }
 
+        if (stationsFailed) {
+            Text("관측소 목록을 불러오지 못했습니다. 새로고침을 눌러 다시 시도하세요.",
+                color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+        }
+        notice?.let { Text(it, color = Color.Gray, fontSize = 13.sp) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(events) { e ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(
@@ -103,5 +136,7 @@ fun TideScreen() {
                 }
             }
         }
+
+        Text(TideRepository.SOURCE_TEXT, fontSize = 10.sp, color = Color.Gray, maxLines = 1)
     }
 }
