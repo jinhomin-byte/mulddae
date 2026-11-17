@@ -339,15 +339,18 @@ function save() {
 
   const stations = allStations.map((st) => {
     let last = null;
+    let wtemLast = null; // 수온(wtem)이 null 이 아닌 마지막 관측 시각
+    const wi = FIELDS.indexOf('wtem');
     for (const obj of store.get(st.code)?.values() ?? []) {
       for (const [d, times] of Object.entries(obj.obs)) {
-        for (const t of Object.keys(times)) {
+        for (const [t, row] of Object.entries(times)) {
           const stamp = `${d} ${t}`;
           if (!last || stamp > last) last = stamp;
+          if (row[wi] !== null && row[wi] !== undefined && (!wtemLast || stamp > wtemLast)) wtemLast = stamp;
         }
       }
     }
-    return { code: st.code, name: st.name, lat: st.lat, lot: st.lot, lastTime: last };
+    return { code: st.code, name: st.name, lat: st.lat, lot: st.lot, lastTime: last, wtemLast };
   });
 
   const indexPath = path.join(OBS_DIR, 'index.json');

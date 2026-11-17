@@ -242,6 +242,9 @@ if (fs.existsSync(OBS_DIR)) {
             if (st.lastTime !== null && !(typeof st.lastTime === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:00$/.test(st.lastTime) && validDate(st.lastTime.slice(0, 10)))) {
               err(f, `${st.code}: lastTime 형식 오류`);
             }
+            if (st.wtemLast !== null && !(typeof st.wtemLast === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:00$/.test(st.wtemLast) && validDate(st.wtemLast.slice(0, 10)))) {
+              err(f, `${st.code}: wtemLast 형식 오류`);
+            }
           }
         }
       }
