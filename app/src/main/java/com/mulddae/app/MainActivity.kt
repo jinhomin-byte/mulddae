@@ -55,6 +55,28 @@ fun TideScreen() {
     var tick by remember { mutableIntStateOf(0) }
     var stations by remember { mutableStateOf(listOf(station)) }
 
+    // 실측(수온·기온·염분): 관측소가 바뀌거나 새로고침(tick)하면 오늘 자료를 다시 읽는다.
+    var obsInfo by remember(station.code) { mutableStateOf<ObsInfo?>(null) }
+    var obsError by remember(station.code) { mutableStateOf<String?>(null) }
+    var obsLoading by remember(station.code) { mutableStateOf(false) }
+    var forceObs by remember { mutableStateOf(false) }
+    LaunchedEffect(station.code, tick) {
+        val force = forceObs
+        forceObs = false
+        obsLoading = true
+        try {
+            val r = ObsRepository.load(ctx, station, force)
+            r.onSuccess { obsInfo = it; obsError = null }
+                .onFailure { obsError = it.message ?: "오류" }
+        } finally {
+            obsLoading = false
+        }
+    }
+    // 실측 탭은 오늘만 보여준다: 날짜를 오늘이 아닌 날로 넘기면 조위 탭으로 돌아간다.
+    LaunchedEffect(viewTime.toLocalDate()) {
+        if (tab != 0 && viewTime.toLocalDate() != LocalDate.now()) tab = 0
+    }
+
     var stationsFailed by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
 
@@ -168,6 +190,7 @@ fun TideScreen() {
             Spacer(Modifier.width(8.dp))
             Button(onClick = {
                 forceNext = true
+                forceObs = true
                 notice = null
                 error = null
                 tick++
@@ -191,7 +214,15 @@ fun TideScreen() {
 
         TabRow(selectedTabIndex = tab) {
             TAB_NAMES.forEachIndexed { i, name ->
-                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name, maxLines = 2, fontSize = 12.sp) })
+                // 수온이 없는 실측소는 '수온·기온' 탭 이름을 '기온'으로 바꾼다.
+                val label = if (i == 1 && obsInfo?.let { it.inIndex && !it.hasWtem } == true) "기온" else name
+                Tab(selected = tab == i, onClick = {
+                    // 실측 탭은 오늘만 보여주므로 날짜를 오늘로 되돌린다.
+                    if (i != 0 && viewTime.toLocalDate() != LocalDate.now()) {
+                        viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
+                    }
+                    tab = i
+                }, text = { Text(label, maxLines = 2, fontSize = 12.sp) })
             }
         }
 
@@ -208,7 +239,9 @@ fun TideScreen() {
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-        if (tab != 0) {
+        if (tab == 1 || tab == 3) {
+            ObsTabContent(obsInfo, obsLoading, obsError, salinity = tab == 3)
+        } else if (tab != 0) {
             Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                 Text("준비 중", fontSize = 18.sp, color = Color.Gray)
             }
@@ -261,6 +294,9 @@ fun TideScreen() {
         }
         }
 
-        Text(TideRepository.SOURCE_TEXT, fontSize = 10.sp, color = Color.Gray, maxLines = 1)
+        Text(
+            if (tab == 0) TideRepository.SOURCE_TEXT else ObsRepository.SOURCE_TEXT,
+            fontSize = 9.sp, color = Color.Gray, maxLines = 1
+        )
     }
 }

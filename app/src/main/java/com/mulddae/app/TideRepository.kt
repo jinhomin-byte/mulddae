@@ -59,7 +59,7 @@ object TideRepository {
     }
 
     /** 캐시 파일 우선(maxAgeMs 이내), 아니면 다운로드 후 저장. 다운로드 실패 시 오래된 캐시라도 사용. */
-    private fun fetchCached(c: Context, path: String, cacheName: String, maxAgeMs: Long): String {
+    internal fun fetchCached(c: Context, path: String, cacheName: String, maxAgeMs: Long): String {
         val f = cacheFile(c, cacheName)
         // 파싱되는 캐시만 유효. 깨진 캐시는 무시하고 다시 받는다.
         val cached = runCatching { f.readText().also { JSONObject(it) } }.getOrNull()
