@@ -29,7 +29,7 @@ const val OBS_SLNT = 5
  * TideRepository의 캐시 방식을 재사용한다(유효시간 20분, 실패 시 캐시).
  */
 object ObsRepository {
-    const val SOURCE_TEXT = "출처: 해양수산부 국립해양조사원, 조위관측소 최신 관측데이터 (공공데이터포털)"
+    const val SOURCE_TEXT = "출처: 해양수산부 국립해양조사원,\n조위관측소 최신 관측데이터 (공공데이터포털)"
     private const val MAX_AGE_MS = 20L * 60 * 1000
 
     /** 오늘의 실측. force면 캐시를 무시하고 다시 받는다. 해당 월 파일이 없으면 rows가 빈 정상 결과. */

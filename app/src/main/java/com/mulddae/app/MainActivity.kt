@@ -363,7 +363,13 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
             TAB_NAMES.forEachIndexed { i, name ->
                 // 수온이 없는 실측소는 '수온·기온' 탭 이름을 '기온'으로 바꾼다.
                 val label = if (i == 1 && obsInfo?.let { it.inIndex && !it.hasWtem } == true) "기온" else name
-                Tab(selected = tab == i, onClick = { tab = i }, selectedContentColor = ptextColor(), text = { Text(label, maxLines = 1, softWrap = false, fontSize = 11.sp) })
+                Tab(selected = tab == i, onClick = { tab = i }, selectedContentColor = ptextColor(), text = {
+                    Text(
+                        label, maxLines = 1, softWrap = false, fontSize = 11.sp, lineHeight = 16.sp,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
+                        modifier = Modifier.wrapContentWidth(unbounded = true).padding(vertical = 10.dp)
+                    )
+                })
             }
         }
 
@@ -439,7 +445,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (tab == 0) TideRepository.SOURCE_TEXT else ObsRepository.SOURCE_TEXT,
-                fontSize = 9.sp, color = subColor(), maxLines = 1, modifier = Modifier.weight(1f)
+                fontSize = 9.sp, color = subColor(), maxLines = 2, modifier = Modifier.weight(1f)
             )
         }
     }
