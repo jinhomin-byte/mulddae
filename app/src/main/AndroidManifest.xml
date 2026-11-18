@@ -5,6 +5,8 @@
 
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:theme="@style/Theme.Mulddae">
 
@@ -19,6 +21,7 @@
 
         <receiver
             android:name=".TideWidgetReceiver"
+            android:label="@string/app_name_oneline"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

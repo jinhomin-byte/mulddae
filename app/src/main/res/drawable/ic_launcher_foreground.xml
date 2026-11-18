@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 시안 좌표를 0.7배로 줄여 가운데(54,54)로 이동: 안전 영역 66x66 안에 들어오게 함 -->
+    <group
+        android:scaleX="0.7"
+        android:scaleY="0.7"
+        android:translateX="16.2"
+        android:translateY="13.4">
+        <!-- 초승달: 원(70,38,r15)에서 원(76,33,r13)을 뺀 모양 -->
+        <path
+            android:fillColor="#FFE9A8"
+            android:pathData="M67.43,23.22 A15,15 0 1 0 84.07,43.19 A13,13 0 0 1 67.43,23.22 Z" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M12,64 C24,54 36,54 48,64 S72,74 96,64"
+            android:strokeColor="#7FD0FF"
+            android:strokeLineCap="round"
+            android:strokeWidth="5.5" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M12,80 C24,70 36,70 48,80 S72,90 96,80"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round"
+            android:strokeWidth="5.5" />
+        <path
+            android:fillColor="#2F7BFF"
+            android:pathData="M24.5,73 A5.5,5.5 0 1 0 35.5,73 A5.5,5.5 0 1 0 24.5,73 Z"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.5" />
+        <path
+            android:fillColor="#FF9020"
+            android:pathData="M60.5,87.5 A5.5,5.5 0 1 0 71.5,87.5 A5.5,5.5 0 1 0 60.5,87.5 Z"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.5" />
+    </group>
+</vector>
