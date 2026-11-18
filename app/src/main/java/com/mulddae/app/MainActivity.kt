@@ -276,7 +276,6 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                     }
                 }
             }
-            Spacer(Modifier.width(2.dp))
             val curFav = favs.any { it.code == station.code }
             TextButton(
                 onClick = { toggleFav(station) },
@@ -286,7 +285,6 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
             ) {
                 Text(if (curFav) "★" else "☆", fontSize = 24.sp, color = if (curFav) STAR_COLOR else subColor())
             }
-            Spacer(Modifier.width(2.dp))
             OutlinedButton(
                 onClick = { viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES) },
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = ptextColor()),
@@ -294,7 +292,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
             ) {
                 Text("현재", maxLines = 1, softWrap = false)
             }
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(2.dp))
             Button(onClick = {
                 forceNext = true
                 forceObs = true
@@ -302,6 +300,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                 error = null
                 tick++
             }, enabled = !loading, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("새로고침", maxLines = 1, softWrap = false) }
+            ThemeButton(themeIndex, onThemeSelect)
         }
 
         if (favs.isNotEmpty()) {
@@ -440,9 +439,8 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (tab == 0) TideRepository.SOURCE_TEXT else ObsRepository.SOURCE_TEXT,
-                fontSize = 9.sp, color = subColor(), maxLines = 2, modifier = Modifier.weight(1f)
+                fontSize = 9.sp, color = subColor(), maxLines = 1, modifier = Modifier.weight(1f)
             )
-            ThemeButton(themeIndex, onThemeSelect)
         }
     }
 }

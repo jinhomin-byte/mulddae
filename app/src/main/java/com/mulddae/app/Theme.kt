@@ -14,6 +14,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
@@ -141,38 +149,51 @@ fun AppTheme(themeIndex: Int, content: @Composable () -> Unit) {
     }
 }
 
-/** 색 동그라미 버튼(작은 아이콘 하나). 누르면 동그라미 5개 창이 열린다. */
+/** 설정 톱니바퀴 버튼(24dp 아이콘, 터치 40dp). 누르면 색상 선택 창이 열린다. */
 @Composable
 fun ThemeButton(current: Int, onSelect: (Int) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box(
-        Modifier.size(36.dp).clickable { open = true }.semantics { contentDescription = "색상 선택" },
+        Modifier.size(40.dp).clip(CircleShape).clickable { open = true }
+            .semantics { contentDescription = "색상 선택" },
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            Modifier.size(18.dp).background(MaterialTheme.colorScheme.primary, CircleShape)
-                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-        )
+        Icon(Icons.Filled.Settings, contentDescription = null, tint = ptextColor(), modifier = Modifier.size(24.dp))
     }
     if (open) {
         Dialog(onDismissRequest = { open = false }) {
             Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                Row(Modifier.padding(20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PALETTES.forEachIndexed { i, p ->
-                        val sel = i == current
-                        Box(
-                            Modifier.size(32.dp)
-                                .background(p.scheme.primary, CircleShape)
-                                .border(
-                                    if (sel) 3.dp else 1.dp,
-                                    if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
-                                    CircleShape
+                Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("색상 선택", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PALETTES.forEachIndexed { i, p ->
+                            val sel = i == current
+                            Column(
+                                Modifier.width(52.dp).clip(RoundedCornerShape(8.dp))
+                                    .clickable { onSelect(i); open = false }
+                                    .semantics { contentDescription = THEME_NAMES[i] + if (sel) ", 선택됨" else "" },
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    Modifier.size(36.dp)
+                                        .background(THEME_SWATCH[i], CircleShape)
+                                        .border(
+                                            if (sel) 3.dp else 1.dp,
+                                            if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (sel) Text("✓", fontSize = 18.sp, color = if (i == 3) Color(0xFF3E001D) else Color.White)
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    THEME_NAMES[i], fontSize = 11.sp, lineHeight = 13.sp, maxLines = 2,
+                                    textAlign = TextAlign.Center,
+                                    fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal
                                 )
-                                .clickable { onSelect(i); open = false }
-                                .semantics { contentDescription = THEME_NAMES[i] + if (sel) ", 선택됨" else "" },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (sel) Text("✓", fontSize = 16.sp, color = p.scheme.onPrimary)
+                            }
                         }
                     }
                 }
@@ -181,4 +202,8 @@ fun ThemeButton(current: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-private val THEME_NAMES = listOf("기본", "바다", "어둡게", "벚꽃", "민트")
+private val THEME_NAMES = listOf("기본(보라)", "바다", "어둡게", "벚꽃", "민트")
+// 동그라미에 보여 줄 각 테마 대표색(기본·바다·어둡게·벚꽃·민트)
+private val THEME_SWATCH = listOf(
+    Color(0xFF6650A4), Color(0xFF1744E0), Color(0xFF0E141B), Color(0xFFF4A9C4), Color(0xFF2FB9A0),
+)
