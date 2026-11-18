@@ -33,7 +33,9 @@ object ObsRepository {
     private const val MAX_AGE_MS = 20L * 60 * 1000
 
     /** 오늘의 실측. force면 캐시를 무시하고 다시 받는다. 해당 월 파일이 없으면 rows가 빈 정상 결과. */
-    suspend fun load(c: Context, station: Station, force: Boolean = false): Result<ObsInfo> =
+    suspend fun load(
+        c: Context, station: Station, force: Boolean = false, date: LocalDate = LocalDate.now()
+    ): Result<ObsInfo> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val age = if (force) 1L else MAX_AGE_MS
@@ -48,7 +50,7 @@ object ObsRepository {
                 if (found == null) return@runCatching ObsInfo(false, false, emptyList())
                 val indexWtem = !found.isNull("wtemLast")
 
-                val today = LocalDate.now()
+                val today = date
                 val month = "%04d-%02d".format(today.year, today.monthValue)
                 val text = try {
                     TideRepository.fetchCached(

@@ -31,7 +31,9 @@ private val SLNT_COLOR = Color(0xFF00897B)
 
 /** 수온·기온 탭(salinity=false) 또는 염분 탭(salinity=true)의 내용. 오늘 자료만 보여준다. */
 @Composable
-fun ObsTabContent(info: ObsInfo?, loading: Boolean, error: String?, salinity: Boolean) {
+fun ObsTabContent(info: ObsInfo?, loading: Boolean, error: String?, salinity: Boolean, isToday: Boolean = true) {
+    val cur = if (isToday) "현재 " else ""
+    val pre = if (isToday) "오늘 " else ""
     if (info == null) {
         if (error != null) ObsMessage("실측 자료를 불러오지 못했습니다. 새로고침을 눌러 다시 시도하세요.")
         else if (loading) ObsMessage("불러오는 중...")
@@ -45,20 +47,24 @@ fun ObsTabContent(info: ObsInfo?, loading: Boolean, error: String?, salinity: Bo
         ObsMessage("이 관측소는 실측 자료가 없습니다")
         return
     }
+    if (info.rows.isEmpty() && !loading) {
+        ObsMessage("이 날짜의 관측값이 없습니다.")
+        return
+    }
     if (salinity) {
         if (info.rows.none { it.get(OBS_SLNT) != null } && !loading) {
             ObsMessage("이 관측소는 염분 자료가 없습니다")
             return
         }
-        ObsCurrent("현재 염분", info.rows, OBS_SLNT, SLNT_COLOR, "", Modifier.fillMaxWidth())
-        ObsGraph("오늘 염분 그래프", info.rows, OBS_SLNT, SLNT_COLOR)
+        ObsCurrent("${cur}염분", info.rows, OBS_SLNT, SLNT_COLOR, "", Modifier.fillMaxWidth(), pre)
+        ObsGraph("${pre}염분 그래프", info.rows, OBS_SLNT, SLNT_COLOR, pre)
     } else {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (info.hasWtem) ObsCurrent("현재 수온", info.rows, OBS_WTEM, WTEM_COLOR, "℃", Modifier.weight(1f))
-            ObsCurrent("현재 기온", info.rows, OBS_ARTMP, ARTMP_COLOR, "℃", Modifier.weight(1f))
+            if (info.hasWtem) ObsCurrent("${cur}수온", info.rows, OBS_WTEM, WTEM_COLOR, "℃", Modifier.weight(1f), pre)
+            ObsCurrent("${cur}기온", info.rows, OBS_ARTMP, ARTMP_COLOR, "℃", Modifier.weight(1f), pre)
         }
-        if (info.hasWtem) ObsGraph("오늘 수온 그래프", info.rows, OBS_WTEM, WTEM_COLOR)
-        ObsGraph("오늘 기온 그래프", info.rows, OBS_ARTMP, ARTMP_COLOR)
+        if (info.hasWtem) ObsGraph("${pre}수온 그래프", info.rows, OBS_WTEM, WTEM_COLOR, pre)
+        ObsGraph("${pre}기온 그래프", info.rows, OBS_ARTMP, ARTMP_COLOR, pre)
         if (!info.hasWtem) {
             Text("수온 관측이 없는 곳입니다.", color = Color.Gray, fontSize = 13.sp,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp), textAlign = TextAlign.Center)
@@ -67,14 +73,14 @@ fun ObsTabContent(info: ObsInfo?, loading: Boolean, error: String?, salinity: Bo
 }
 
 @Composable
-private fun ObsMessage(text: String) {
+fun ObsMessage(text: String) {
     Text(text, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
         textAlign = TextAlign.Center)
 }
 
 /** 마지막 유효 관측값을 큰 숫자로, 아래에 관측 시각. */
 @Composable
-private fun ObsCurrent(label: String, rows: List<ObsRow>, idx: Int, color: Color, unit: String, modifier: Modifier) {
+private fun ObsCurrent(label: String, rows: List<ObsRow>, idx: Int, color: Color, unit: String, modifier: Modifier, pre: String) {
     val last = rows.lastOrNull { it.get(idx) != null }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, fontSize = 14.sp, color = Color.Gray)
@@ -83,20 +89,20 @@ private fun ObsCurrent(label: String, rows: List<ObsRow>, idx: Int, color: Color
             fontSize = 36.sp, fontWeight = FontWeight.Bold, color = color
         )
         Text(
-            last?.time?.format(DateTimeFormatter.ofPattern("M월 d일 HH:mm")).let { if (it != null) "$it 관측" else "오늘 관측값 없음" },
+            last?.time?.format(DateTimeFormatter.ofPattern("M월 d일 HH:mm")).let { if (it != null) "$it 관측" else "${pre}관측값 없음" },
             fontSize = 12.sp, color = Color.Gray
         )
     }
 }
 
 @Composable
-private fun ObsGraph(title: String, rows: List<ObsRow>, idx: Int, color: Color) {
+private fun ObsGraph(title: String, rows: List<ObsRow>, idx: Int, color: Color, pre: String) {
     val points = remember(rows, idx) {
         rows.mapNotNull { r -> r.get(idx)?.let { (r.time.hour + r.time.minute / 60.0) to it } }
     }
     Text(title, fontSize = 14.sp, color = Color.Gray)
     if (points.isEmpty()) {
-        ObsMessage("오늘 관측값이 없습니다")
+        ObsMessage("${pre}관측값이 없습니다")
     } else {
         ObsChart(points, color, Modifier.fillMaxWidth().height(130.dp))
     }

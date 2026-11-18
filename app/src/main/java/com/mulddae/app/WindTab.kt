@@ -114,7 +114,7 @@ private fun WindMessage(text: String) {
 
 /** 바람 탭 내용. 오늘 자료만 보여준다. */
 @Composable
-fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?) {
+fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?, isToday: Boolean = true) {
     if (info == null) {
         if (error != null) WindMessage("실측 자료를 불러오지 못했습니다. 새로고침을 눌러 다시 시도하세요.")
         else if (loading) WindMessage("불러오는 중...")
@@ -125,6 +125,10 @@ fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?) {
         return
     }
     val rows = info.rows
+    if (rows.isEmpty() && !loading) {
+        WindMessage("이 날짜의 관측값이 없습니다.")
+        return
+    }
     if (rows.none { it.get(OBS_WSPD) != null || it.get(OBS_WDIR) != null } && !loading) {
         WindMessage("이 관측소는 바람 자료가 없습니다")
         return
@@ -170,7 +174,8 @@ fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?) {
         }
     }
 
-    Text("오늘 풍속 그래프", fontSize = 14.sp, color = Color.Gray)
+    val pre = if (isToday) "오늘 " else ""
+    Text("${pre}풍속 그래프", fontSize = 14.sp, color = Color.Gray)
     val points = remember(rows) {
         rows.mapNotNull { r -> r.get(OBS_WSPD)?.let { (r.time.hour + r.time.minute / 60.0) to it } }
     }
@@ -178,7 +183,7 @@ fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?) {
         rows.mapNotNull { r -> r.get(OBS_WSMAX)?.let { (r.time.hour + r.time.minute / 60.0) to it } }
     }
     if (points.isEmpty()) {
-        WindMessage("오늘 풍속 관측값이 없습니다")
+        WindMessage("${pre}풍속 관측값이 없습니다")
     } else {
         WindChart(points, maxPts, Modifier.fillMaxWidth().height(150.dp))
     }
