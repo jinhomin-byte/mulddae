@@ -73,6 +73,26 @@ object ObsRepository {
             }
         }
 
+    /** 수온 마지막 관측(wtemLast)이 24시간 이내인 관측소 코드들. 실패하면 failure(호출 쪽은 마킹 없이 진행). */
+    suspend fun loadWtemCodes(c: Context): Result<Set<String>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val list = JSONObject(
+                TideRepository.fetchCached(c, "obs/index.json", "obs_index.json", MAX_AGE_MS)
+            ).getJSONArray("stations")
+            val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+            val now = LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+            val out = HashSet<String>()
+            for (i in 0 until list.length()) {
+                val o = list.optJSONObject(i) ?: continue
+                if (o.isNull("wtemLast")) continue
+                val code = o.optString("code").takeIf { it.isNotEmpty() } ?: continue
+                val t = runCatching { LocalDateTime.parse(o.getString("wtemLast"), fmt) }.getOrNull() ?: continue
+                if (!t.isBefore(now.minusHours(24))) out.add(code)
+            }
+            out
+        }
+    }
+
     private fun values(a: JSONArray): List<Double?> = (0 until a.length()).map { i ->
         if (a.isNull(i)) null else a.optDouble(i, Double.NaN).takeIf { !it.isNaN() }
     }

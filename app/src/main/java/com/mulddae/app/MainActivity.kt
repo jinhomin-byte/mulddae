@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -36,6 +38,10 @@ class MainActivity : ComponentActivity() {
 }
 
 private val TAB_NAMES = listOf("조위", "수온·기온", "바람", "염분")
+private val STAR_COLOR = Color(0xFFF9A825)
+
+/** 즐겨찾기 안내 문구. undo가 있으면 '되돌리기' 버튼이 붙는다(삭제 위치, 관측소). */
+private class FavNote(val text: String, val undo: Pair<Int, Station>?)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,12 +86,58 @@ fun TideScreen() {
     var stationsFailed by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
 
+    // 수온 마킹(온도계): obs index의 wtemLast가 24시간 이내인 관측소. 실패하면 마킹 없음.
+    var wtemCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
+    LaunchedEffect(tick) {
+        ObsRepository.loadWtemCodes(ctx).onSuccess { wtemCodes = it }
+    }
+
+    // 즐겨찾기(최대 5개). favNote: 안내 문구(+되돌리기용 삭제 항목), 몇 초 뒤 사라진다.
+    var favs by remember { mutableStateOf(Favorites.load(ctx)) }
+    var editCode by remember { mutableStateOf<String?>(null) }
+    var favNote by remember { mutableStateOf<FavNote?>(null) }
+    LaunchedEffect(favNote) {
+        if (favNote != null) {
+            kotlinx.coroutines.delay(4000)
+            favNote = null
+        }
+    }
+    var stationsReady by remember { mutableStateOf(false) } // 서버 관측소 목록을 받은 뒤 true
+    fun setFavs(list: List<Station>) {
+        favs = list
+        Favorites.save(ctx, list)
+        favNote = null // 즐겨찾기가 바뀌면 되돌리기 안내를 닫는다
+    }
+    // 칩이 사라지면 ×도 해제
+    LaunchedEffect(favs, editCode) {
+        if (editCode != null && favs.none { it.code == editCode }) editCode = null
+    }
+    fun toggleFav(s: Station) {
+        if (favs.any { it.code == s.code }) {
+            setFavs(favs.filter { it.code != s.code })
+            favNote = null
+        } else if (favs.size >= MAX_FAVORITES) {
+            favNote = FavNote("최대 5개까지 가능합니다", null)
+        } else {
+            setFavs(favs + s)
+        }
+    }
+    fun selectStation(s: Station) {
+        editCode = null
+        station = s
+        TideRepository.selectStation(ctx, s)
+    }
+
     // 관측소 목록 로드. 새로고침(tick)을 누르면 실패했을 때 다시 시도한다.
     LaunchedEffect(tick) {
         TideRepository.loadStations(ctx).onSuccess { list ->
             stationsFailed = false
             if (list.isNotEmpty()) {
                 stations = list
+                stationsReady = true
+                // 즐겨찾기: 목록에 없는 코드는 정리하고 이름은 목록의 최신 이름으로 맞춘다.
+                val cleaned = favs.mapNotNull { f -> list.firstOrNull { it.code == f.code } }
+                if (cleaned != favs) setFavs(cleaned)
                 val found = list.firstOrNull { it.code == station.code }
                 if (found == null) {
                     // 저장된 관측소가 목록에 없으면 기본(인천)으로 되돌린다.
@@ -105,6 +157,7 @@ fun TideScreen() {
     val yearTo = viewTime.plusDays(1).year
     // 관측소가 바뀌면 이전 안내·오류 문구를 지운다(아래 로드 효과보다 먼저 실행됨).
     LaunchedEffect(station.code) {
+        editCode = null
         error = null
         notice = null
     }
@@ -174,31 +227,112 @@ fun TideScreen() {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                OutlinedButton(onClick = { menu = true }) {
-                    Text("관측소: ${station.name}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                OutlinedButton(
+                    onClick = { menu = true },
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "관측소 선택, ${station.name}" }
+                ) {
+                    ThermoMark(station.code in wtemCodes)
+                    Text(
+                        station.name, maxLines = 1, softWrap = false,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Text(" ▾", maxLines = 1, softWrap = false)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     stations.forEach { s ->
-                        DropdownMenuItem(text = { Text(s.name) }, onClick = {
-                            menu = false
-                            station = s
-                            TideRepository.selectStation(ctx, s)
-                        })
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    ThermoMark(s.code in wtemCodes)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(s.name)
+                                }
+                            },
+                            trailingIcon = {
+                                val fav = favs.any { it.code == s.code }
+                                Text(
+                                    if (fav) "★" else "☆", fontSize = 22.sp,
+                                    color = if (fav) STAR_COLOR else Color.Gray,
+                                    modifier = Modifier
+                                        .semantics { contentDescription = if (fav) "즐겨찾기 해제" else "즐겨찾기 추가" }
+                                        .clickable { toggleFav(s) }.padding(horizontal = 6.dp)
+                                )
+                            },
+                            onClick = {
+                                menu = false
+                                selectStation(s)
+                            })
                     }
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = { viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES) }) {
+            Spacer(Modifier.width(2.dp))
+            val curFav = favs.any { it.code == station.code }
+            TextButton(
+                onClick = { toggleFav(station) },
+                contentPadding = PaddingValues(horizontal = 4.dp),
+                modifier = Modifier.defaultMinSize(minWidth = 36.dp)
+                    .semantics { contentDescription = if (curFav) "즐겨찾기 해제" else "즐겨찾기 추가" }
+            ) {
+                Text(if (curFav) "★" else "☆", fontSize = 24.sp, color = if (curFav) STAR_COLOR else Color.Gray)
+            }
+            Spacer(Modifier.width(2.dp))
+            OutlinedButton(
+                onClick = { viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES) },
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
                 Text("현재", maxLines = 1, softWrap = false)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(4.dp))
             Button(onClick = {
                 forceNext = true
                 forceObs = true
                 notice = null
                 error = null
                 tick++
-            }, enabled = !loading) { Text("새로고침", maxLines = 1, softWrap = false) }
+            }, enabled = !loading, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("새로고침", maxLines = 1, softWrap = false) }
+        }
+
+        if (favs.isNotEmpty()) {
+            FavoriteChips(
+                favs = favs, selectedCode = station.code, wtemCodes = wtemCodes, editCode = editCode,
+                onSelect = { f ->
+                    // 목록을 받은 뒤에는 반드시 목록 안의 Station을 쓴다.
+                    val target = if (stationsReady) stations.firstOrNull { it.code == f.code } else f
+                    if (target != null) selectStation(target)
+                },
+                onLongPress = { editCode = it.code },
+                onDelete = { s ->
+                    val idx = favs.indexOfFirst { it.code == s.code }
+                    if (idx >= 0) {
+                        setFavs(favs.filter { it.code != s.code })
+                        favNote = FavNote("'${s.name}' 삭제됨", idx to s)
+                    }
+                    editCode = null
+                }
+            )
+        }
+        favNote?.let { n ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(n.text, fontSize = 13.sp, color = Color.Gray)
+                n.undo?.let { (idx, s) ->
+                    TextButton(
+                        onClick = {
+                            if (favs.none { it.code == s.code }) {
+                                if (favs.size < MAX_FAVORITES) {
+                                    setFavs(favs.toMutableList().also { it.add(idx.coerceIn(0, it.size), s) })
+                                } else {
+                                    favNote = FavNote("최대 5개까지 가능합니다", null)
+                                }
+                            } else {
+                                favNote = null
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) { Text("되돌리기", fontSize = 13.sp) }
+                }
+            }
         }
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -226,7 +360,7 @@ fun TideScreen() {
                         viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
                     }
                     tab = i
-                }, text = { Text(label, maxLines = 2, fontSize = 12.sp) })
+                }, text = { Text(label, maxLines = 1, softWrap = false, fontSize = 11.sp) })
             }
         }
 
