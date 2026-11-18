@@ -90,7 +90,7 @@ private fun ObsGraph(title: String, rows: List<ObsRow>, idx: Int, color: Color) 
     if (points.isEmpty()) {
         ObsMessage("오늘 관측값이 없습니다")
     } else {
-        ObsChart(points, color, Modifier.fillMaxWidth().height(180.dp))
+        ObsChart(points, color, Modifier.fillMaxWidth().height(130.dp))
     }
 }
 

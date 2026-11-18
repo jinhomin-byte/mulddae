@@ -173,8 +173,10 @@ fun TideScreen() {
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box {
-                OutlinedButton(onClick = { menu = true }) { Text("관측소: ${station.name}") }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                OutlinedButton(onClick = { menu = true }) {
+                    Text("관측소: ${station.name}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     stations.forEach { s ->
                         DropdownMenuItem(text = { Text(s.name) }, onClick = {
@@ -185,8 +187,10 @@ fun TideScreen() {
                     }
                 }
             }
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = { viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES) }) { Text("현재") }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(onClick = { viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES) }) {
+                Text("현재", maxLines = 1, softWrap = false)
+            }
             Spacer(Modifier.width(8.dp))
             Button(onClick = {
                 forceNext = true
@@ -194,7 +198,7 @@ fun TideScreen() {
                 notice = null
                 error = null
                 tick++
-            }, enabled = !loading) { Text("새로고침") }
+            }, enabled = !loading) { Text("새로고침", maxLines = 1, softWrap = false) }
         }
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -241,10 +245,8 @@ fun TideScreen() {
         ) {
         if (tab == 1 || tab == 3) {
             ObsTabContent(obsInfo, obsLoading, obsError, salinity = tab == 3)
-        } else if (tab != 0) {
-            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                Text("준비 중", fontSize = 18.sp, color = Color.Gray)
-            }
+        } else if (tab == 2) {
+            WindTabContent(obsInfo, obsLoading, obsError)
         } else {
             val now = tideHeightAt(allEvents, viewTime)
             Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {

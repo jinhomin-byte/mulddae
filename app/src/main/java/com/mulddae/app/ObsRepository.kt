@@ -19,6 +19,9 @@ class ObsInfo(val inIndex: Boolean, val hasWtem: Boolean, val rows: List<ObsRow>
 
 const val OBS_WTEM = 0
 const val OBS_ARTMP = 1
+const val OBS_WSPD = 2
+const val OBS_WSMAX = 3
+const val OBS_WDIR = 4
 const val OBS_SLNT = 5
 
 /**
