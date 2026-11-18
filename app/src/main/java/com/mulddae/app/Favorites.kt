@@ -4,11 +4,11 @@ import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -53,12 +54,12 @@ private val THERMO_TUBE = PathParser().parsePathString("M10 4a2 2 0 0 1 4 0v9.47
 
 /** 빨간 온도계 마크(규격: 24x24 기준, 20dp). show=false면 같은 크기의 빈 자리. */
 @Composable
-fun ThermoMark(show: Boolean) {
+fun ThermoMark(show: Boolean, markSize: Dp = 20.dp) {
     if (!show) {
-        Spacer(Modifier.size(20.dp))
+        Spacer(Modifier.size(markSize))
         return
     }
-    Canvas(Modifier.size(20.dp)) {
+    Canvas(Modifier.size(markSize)) {
         scale(size.width / 24f, pivot = Offset.Zero) {
             drawPath(THERMO_TUBE, Color.White)
             drawPath(
@@ -93,44 +94,60 @@ fun FavoriteChips(
     onDelete: (Station) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         favs.forEach { s ->
             val selected = s.code == selectedCode
             val hasTemp = s.code in wtemCodes
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                border = BorderStroke(
-                    if (selected) 2.dp else 1.dp,
-                    if (selected) MaterialTheme.colorScheme.primary else Color.LightGray
-                ),
-                modifier = Modifier.combinedClickable(
-                    onClick = { onSelect(s) },
-                    onLongClick = { onLongPress(s) }
-                )
-            ) {
-                Row(
-                    Modifier.defaultMinSize(minHeight = 32.dp).padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+            Box(Modifier.weight(1f).padding(top = 8.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        if (selected) 2.dp else 1.dp,
+                        if (selected) MaterialTheme.colorScheme.primary else Color.LightGray
+                    ),
+                    modifier = Modifier.fillMaxWidth().combinedClickable(
+                        onClick = { onSelect(s) },
+                        onLongClick = { onLongPress(s) }
+                    )
                 ) {
-                    if (hasTemp) {
-                        ThermoMark(true)
-                        Spacer(Modifier.width(2.dp))
-                    }
-                    Text(chipLabel(s.name), fontSize = 13.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
-                    if (editCode == s.code) {
-                        Spacer(Modifier.width(6.dp))
+                    Row(
+                        Modifier.defaultMinSize(minHeight = 32.dp).padding(horizontal = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        if (hasTemp) {
+                            ThermoMark(true, 14.dp)
+                            Spacer(Modifier.width(1.dp))
+                        }
                         Text(
-                            "×", fontSize = 18.sp, color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.clickable { onDelete(s) }.padding(horizontal = 4.dp)
+                            chipLabel(s.name), fontSize = 12.sp, maxLines = 1, softWrap = false,
+                            overflow = TextOverflow.Clip, modifier = Modifier.weight(1f, fill = false)
                         )
+                    }
+                }
+                if (editCode == s.code) {
+                    // 칩 오른쪽 위 모서리에 걸친 원형 삭제 배지(터치영역 24dp, 칩 크기는 불변)
+                    Box(
+                        Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-8).dp)
+                            .size(24.dp).clickable { onDelete(s) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            Modifier.size(18.dp).background(MaterialTheme.colorScheme.error, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("×", fontSize = 14.sp, color = Color.White, lineHeight = 14.sp)
+                        }
                     }
                 }
             }
         }
+        // 칩이 5개 미만이면 빈 자리로 채워 칩 폭이 커지지 않게 하고 왼쪽 정렬을 유지한다.
+        val empty = MAX_FAVORITES - favs.size
+        if (empty > 0) Spacer(Modifier.weight(empty.toFloat()))
     }
 }
