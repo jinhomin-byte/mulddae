@@ -3,7 +3,12 @@ package com.mulddae.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -285,31 +290,47 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                 }
             }
             val curFav = favs.any { it.code == station.code }
-            TextButton(
+            Spacer(Modifier.width(5.dp))
+            CircleOutlineButton(
                 onClick = { toggleFav(station) },
-                contentPadding = PaddingValues(horizontal = 4.dp),
-                modifier = Modifier.defaultMinSize(minWidth = 36.dp)
-                    .semantics { contentDescription = if (curFav) "즐겨찾기 해제" else "즐겨찾기 추가" }
+                description = if (curFav) "즐겨찾기 해제" else "즐겨찾기 추가"
             ) {
-                Text(if (curFav) "★" else "☆", fontSize = 24.sp, color = if (curFav) STAR_COLOR else subColor())
+                Text(if (curFav) "★" else "☆", fontSize = 22.sp, color = if (curFav) STAR_COLOR else subColor())
             }
-            OutlinedButton(
+            Spacer(Modifier.width(5.dp))
+            CircleOutlineButton(
                 onClick = { viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES) },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = ptextColor()),
-                contentPadding = PaddingValues(horizontal = 6.dp),
-                modifier = Modifier.defaultMinSize(minWidth = 1.dp)
+                description = "현재로 이동"
             ) {
-                Text("현재", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                var todaySize by remember { mutableStateOf(12f) }
+                Text(
+                    "오늘", fontSize = todaySize.sp, fontWeight = FontWeight.SemiBold,
+                    color = ptextColor(), maxLines = 1, softWrap = false,
+                    onTextLayout = { r ->
+                        if (r.hasVisualOverflow && todaySize > 9f) {
+                            todaySize = (todaySize - 0.5f).coerceAtLeast(9f)
+                        }
+                    }
+                )
             }
-            Spacer(Modifier.width(2.dp))
-            Button(onClick = {
-                forceNext = true
-                forceObs = true
-                notice = null
-                error = null
-                tick++
-            }, enabled = !loading, contentPadding = PaddingValues(horizontal = 6.dp),
-                modifier = Modifier.defaultMinSize(minWidth = 1.dp)) { Text("새로고침", fontSize = 12.sp, maxLines = 1, softWrap = false) }
+            Spacer(Modifier.width(5.dp))
+            Box(
+                Modifier.size(40.dp).clip(CircleShape)
+                    .background(if (loading) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primary)
+                    .clickable(enabled = !loading) {
+                        forceNext = true
+                        forceObs = true
+                        notice = null
+                        error = null
+                        tick++
+                    }
+                    .semantics { contentDescription = "새로고침" },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Refresh, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+            }
+            Spacer(Modifier.width(5.dp))
             ThemeButton(themeIndex, onThemeSelect)
         }
 

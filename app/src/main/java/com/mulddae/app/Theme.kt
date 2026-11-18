@@ -149,15 +149,23 @@ fun AppTheme(themeIndex: Int, content: @Composable () -> Unit) {
     }
 }
 
-/** 설정 톱니바퀴 버튼(24dp 아이콘, 터치 40dp). 누르면 색상 선택 창이 열린다. */
+/** 윗줄 공용 40dp 원형 테두리 버튼. */
+@Composable
+fun CircleOutlineButton(onClick: () -> Unit, description: String, content: @Composable () -> Unit) {
+    Box(
+        Modifier.size(40.dp).clip(CircleShape)
+            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center
+    ) { content() }
+}
+
+/** 설정 톱니바퀴 버튼(24dp 아이콘, 40dp 테두리 원). 누르면 색상 선택 창이 열린다. */
 @Composable
 fun ThemeButton(current: Int, onSelect: (Int) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Box(
-        Modifier.size(40.dp).clip(CircleShape).clickable { open = true }
-            .semantics { contentDescription = "색상 선택" },
-        contentAlignment = Alignment.Center
-    ) {
+    CircleOutlineButton(onClick = { open = true }, description = "색상 선택") {
         Icon(Icons.Filled.Settings, contentDescription = null, tint = ptextColor(), modifier = Modifier.size(24.dp))
     }
     if (open) {
