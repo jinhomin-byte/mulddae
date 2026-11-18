@@ -19,6 +19,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
 import java.time.Instant
@@ -443,9 +444,18 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
         }
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val sourceText = if (tab == 0) TideRepository.SOURCE_TEXT else ObsRepository.SOURCE_TEXT
+            var sourceSize by remember(sourceText) { mutableStateOf(9f) }
             Text(
-                if (tab == 0) TideRepository.SOURCE_TEXT else ObsRepository.SOURCE_TEXT,
-                fontSize = 9.sp, color = subColor(), maxLines = 2, modifier = Modifier.weight(1f)
+                sourceText,
+                fontSize = sourceSize.sp, color = subColor(), maxLines = 1, softWrap = false,
+                overflow = TextOverflow.Clip,
+                onTextLayout = { r ->
+                    if (r.hasVisualOverflow && sourceSize > 6.5f) {
+                        sourceSize = (sourceSize - 0.5f).coerceAtLeast(6.5f)
+                    }
+                },
+                modifier = Modifier.weight(1f)
             )
         }
     }

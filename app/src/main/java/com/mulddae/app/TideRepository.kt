@@ -19,7 +19,7 @@ object TideRepository {
     private const val BASE = "https://raw.githubusercontent.com/jinhomin-byte/mulddae/main/data/"
     private const val INDEX_MAX_AGE_MS = 24L * 60 * 60 * 1000
 
-    const val SOURCE_TEXT = "출처: 해양수산부 국립해양조사원,\n조석예보(고, 저조) (공공데이터포털)"
+    const val SOURCE_TEXT = "출처: 해양수산부 국립해양조사원, 조석예보(고, 저조) (공공데이터포털)"
 
     private const val RETRY_MS = 60L * 60 * 1000
 
