@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -41,7 +42,13 @@ private val WIND_STAGES = listOf(
 private val WIND_NAMES = listOf("북풍", "북동풍", "동풍", "남동풍", "남풍", "남서풍", "서풍", "북서풍")
 
 /** 풍속(m/s)에 해당하는 단계 색. 경계값은 아래 구간이 아니라 위 구간(v>=하한). */
-private fun windColor(v: Double): Color = WIND_STAGES.last { v >= it.first }.second
+private fun windColor(v: Double): Color = stageColor(WIND_STAGES.last { v >= it.first }.second)
+
+/** 밝은 테마에서만 쓰는 진한 노랑(흰색 대비 약 3.3:1). WindTabContent에서 테마에 따라 갱신. */
+private val WIND_YELLOW = Color(0xFFF5C542)
+private val WIND_YELLOW_LIGHT = Color(0xFFE0A100)
+private var windLightTheme = false
+private fun stageColor(c: Color): Color = if (windLightTheme && c == WIND_YELLOW) WIND_YELLOW_LIGHT else c
 
 private fun windName(deg: Double): String = WIND_NAMES[(((deg % 360 + 360) % 360) / 45).roundToInt() % 8]
 
@@ -117,6 +124,7 @@ private fun WindMessage(text: String) {
 /** 바람 탭 내용. 오늘 자료만 보여준다. */
 @Composable
 fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?, isToday: Boolean = true) {
+    windLightTheme = MaterialTheme.colorScheme.background.luminance() > 0.5f
     if (info == null) {
         if (error != null) WindMessage("실측 자료를 불러오지 못했습니다. 새로고침을 눌러 다시 시도하세요.")
         else if (loading) WindMessage("불러오는 중...")
@@ -232,7 +240,7 @@ private fun WindLegend() {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             WIND_STAGES.forEach { st ->
-                Box(Modifier.weight(1f).height(8.dp).background(st.second))
+                Box(Modifier.weight(1f).height(8.dp).background(stageColor(st.second)))
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
