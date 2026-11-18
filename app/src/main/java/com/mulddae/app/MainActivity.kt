@@ -228,7 +228,7 @@ fun TideScreen() {
 
             if (dayEvents.isEmpty() && !loading) {
                 Text(
-                    "이 날짜의 조석 데이터가 없습니다. (오늘부터 약 1년 뒤까지만 제공됩니다)",
+                    "이 날짜의 조석 데이터가 없습니다.\n(오늘부터 약 1년 뒤까지만 제공됩니다)",
                     color = Color.Gray, fontSize = 13.sp
                 )
             }
