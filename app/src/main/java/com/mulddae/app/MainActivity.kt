@@ -243,9 +243,16 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "관측소 선택, ${station.name}" }
                 ) {
                     ThermoMark(station.code in wtemCodes)
+                    var nameSize by remember(station.name) { mutableStateOf(14f) }
                     Text(
                         station.name, maxLines = 1, softWrap = false,
+                        fontSize = nameSize.sp,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        onTextLayout = { r ->
+                            if (r.hasVisualOverflow && nameSize > 9f) {
+                                nameSize = (nameSize - 0.5f).coerceAtLeast(9f)
+                            }
+                        },
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     Text(" ▾", maxLines = 1, softWrap = false)
@@ -289,9 +296,10 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
             OutlinedButton(
                 onClick = { viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES) },
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = ptextColor()),
-                contentPadding = PaddingValues(horizontal = 8.dp)
+                contentPadding = PaddingValues(horizontal = 6.dp),
+                modifier = Modifier.defaultMinSize(minWidth = 1.dp)
             ) {
-                Text("현재", maxLines = 1, softWrap = false)
+                Text("현재", fontSize = 12.sp, maxLines = 1, softWrap = false)
             }
             Spacer(Modifier.width(2.dp))
             Button(onClick = {
@@ -300,7 +308,8 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                 notice = null
                 error = null
                 tick++
-            }, enabled = !loading, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("새로고침", maxLines = 1, softWrap = false) }
+            }, enabled = !loading, contentPadding = PaddingValues(horizontal = 6.dp),
+                modifier = Modifier.defaultMinSize(minWidth = 1.dp)) { Text("새로고침", fontSize = 12.sp, maxLines = 1, softWrap = false) }
             ThemeButton(themeIndex, onThemeSelect)
         }
 
