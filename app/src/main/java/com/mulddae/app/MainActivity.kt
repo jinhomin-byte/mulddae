@@ -3,9 +3,10 @@ package com.mulddae.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,10 +15,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
-import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -27,13 +31,20 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private val TAB_NAMES = listOf("조위", "수온·기온", "바람", "염분")
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TideScreen() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
     var station by remember { mutableStateOf(TideRepository.selectedStation(ctx)) }
-    var date by remember { mutableStateOf(LocalDate.now()) }
-    var events by remember { mutableStateOf<List<TideEvent>>(emptyList()) }
+    // 가운데 점선이 가리키는 시각. 그래프를 끌면 바뀐다.
+    var viewTime by remember { mutableStateOf(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)) }
+    var yearData by remember(station.code) { mutableStateOf<Map<Int, List<TideEvent>>>(emptyMap()) }
+    val noData = remember(station.code) { HashSet<Int>() } // 데이터 없음이 확인된 미래 연도(이번 실행 동안만)
+    var forceNext by remember { mutableStateOf(false) }
+    var tab by remember { mutableIntStateOf(0) }
+    var showPicker by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -63,54 +74,121 @@ fun TideScreen() {
         }.onFailure { stationsFailed = true }
     }
 
-    LaunchedEffect(station, date, tick) {
-        loading = true
+    // 점선 앞뒤 12시간이 걸치는 연도 파일을 받아 둔다(이미 받은 해는 건너뜀).
+    val yearFrom = viewTime.minusDays(1).year
+    val yearTo = viewTime.plusDays(1).year
+    // 관측소가 바뀌면 이전 안내·오류 문구를 지운다(아래 로드 효과보다 먼저 실행됨).
+    LaunchedEffect(station.code) {
+        error = null
         notice = null
-        val r = TideRepository.load(ctx, station, date, force = tick > 0)
-        events = r.getOrDefault(emptyList())
-        error = r.exceptionOrNull()?.message
-        if (r.isSuccess && tick > 0 && TideRepository.lastDownloadFailed) {
-            notice = "새로고침 실패, 저장된 데이터 표시"
-        }
-        loading = false
-        if (r.isSuccess) TideWidget().updateAll(ctx)
     }
-
-    val m = mulddaeOf(date)
-    val dateFmt = DateTimeFormatter.ofPattern("M월 d일")
-
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box {
-            OutlinedButton(onClick = { menu = true }) { Text("관측소: ${station.name}") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                stations.forEach { s ->
-                    DropdownMenuItem(text = { Text(s.name) }, onClick = {
-                        menu = false
-                        station = s
-                        TideRepository.selectStation(ctx, s)
-                    })
+    LaunchedEffect(station, yearFrom, yearTo, tick) {
+        val force = forceNext // 한 번 읽고 바로 리셋
+        forceNext = false
+        val years = listOf(yearFrom, yearTo).distinct()
+        if (force) noData.clear()
+        val needed = if (force) years else years.filter { !yearData.containsKey(it) && it !in noData }
+        if (needed.isEmpty()) return@LaunchedEffect
+        loading = true
+        try {
+            var anyOk = false
+            var currentYearOk = false
+            for (y in needed) {
+                val r = TideRepository.loadYear(ctx, station, y, force)
+                if (r.isSuccess) {
+                    anyOk = true
+                    if (y == LocalDate.now().year) currentYearOk = true
+                    yearData = yearData + (y to r.getOrThrow()) // 실패한 해는 넣지 않아 다시 시도된다
+                    error = null
+                    notice = if (force && TideRepository.lastDownloadFailed) "새로고침 실패, 저장된 데이터 표시" else null
+                } else if (y > LocalDate.now().year) {
+                    // 미래 연도의 데이터 없음은 오류로 보이지 않게 하고, 이번 실행 동안 다시 묻지 않는다.
+                    noData.add(y)
+                } else {
+                    error = r.exceptionOrNull()?.message
                 }
             }
+            if (currentYearOk || (force && anyOk)) TideWidget().updateAll(ctx)
+        } finally {
+            loading = false
+        }
+    }
+
+    val allEvents = remember(yearData) { yearData.values.flatten().sortedBy { it.time } }
+    val viewDate = viewTime.toLocalDate()
+    val dayEvents = remember(allEvents, viewDate) { allEvents.filter { it.time.toLocalDate() == viewDate } }
+    val m = remember(viewDate) { mulddaeOf(viewDate) }
+    val dateFmt = DateTimeFormatter.ofPattern("M월 d일")
+
+    // 세로 범위: 로드된 모든 연도 데이터의 최소·최대 (100cm 단위로 바깥으로). 데이터 없으면 -100~1000
+    val yMin = if (allEvents.isEmpty()) -100
+        else Math.floorDiv(allEvents.minOf { it.heightCm } - 10, 100) * 100
+    val yMax = if (allEvents.isEmpty()) 1000
+        else -Math.floorDiv(-(allEvents.maxOf { it.heightCm } + 10), 100) * 100
+
+    if (showPicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = viewDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { ms ->
+                        val d = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate()
+                        viewTime = LocalDateTime.of(d, viewTime.toLocalTime())
+                    }
+                    showPicker = false
+                }) { Text("확인") }
+            },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("취소") } }
+        ) { DatePicker(state = pickerState) }
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box {
+                OutlinedButton(onClick = { menu = true }) { Text("관측소: ${station.name}") }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    stations.forEach { s ->
+                        DropdownMenuItem(text = { Text(s.name) }, onClick = {
+                            menu = false
+                            station = s
+                            TideRepository.selectStation(ctx, s)
+                        })
+                    }
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(onClick = { viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES) }) { Text("현재") }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = {
+                forceNext = true
+                notice = null
+                error = null
+                tick++
+            }, enabled = !loading) { Text("새로고침") }
         }
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { date = date.minusDays(1) }) { Text("◀") }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            TextButton(onClick = { viewTime = viewTime.minusDays(1) }) { Text("◀") }
+            Column(
+                Modifier.weight(1f).clickable { showPicker = true },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
-                    "${date.format(dateFmt)} (${date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.KOREAN)})",
+                    "${viewDate.format(dateFmt)} (${viewDate.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.KOREAN)})",
                     fontSize = 20.sp
                 )
                 Text("음력 ${m.lunarMonth}.${m.lunarDay}", fontSize = 13.sp, color = Color.Gray)
             }
-            TextButton(onClick = { date = date.plusDays(1) }) { Text("▶") }
+            TextButton(onClick = { viewTime = viewTime.plusDays(1) }) { Text("▶") }
         }
 
-        Text(m.title(), fontSize = 36.sp, modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.primary)
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { date = LocalDate.now() }) { Text("오늘") }
-            Button(onClick = { tick++ }, enabled = !loading) { Text("새로고침") }
+        TabRow(selectedTabIndex = tab) {
+            TAB_NAMES.forEachIndexed { i, name ->
+                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name, maxLines = 2, fontSize = 12.sp) })
+            }
         }
 
         if (stationsFailed) {
@@ -121,11 +199,43 @@ fun TideScreen() {
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
 
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(events) { e ->
+        // 탭 내용은 이 영역 안에서 세로로 스크롤된다(출처 줄은 맨 아래 고정).
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+        if (tab != 0) {
+            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                Text("준비 중", fontSize = 18.sp, color = Color.Gray)
+            }
+        } else {
+            val now = tideHeightAt(allEvents, viewTime)
+            Text(m.title(), fontSize = 28.sp, color = MaterialTheme.colorScheme.primary)
+            Text(
+                "${viewTime.format(DateTimeFormatter.ofPattern("M월 d일 HH:mm"))}" +
+                    (if (now != null) " · 약 ${Math.round(now)} cm" else ""),
+                fontSize = 14.sp, modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            TideChart(
+                events = allEvents,
+                center = viewTime,
+                onCenterChange = { viewTime = it },
+                yMin = yMin,
+                yMax = yMax,
+                modifier = Modifier.fillMaxWidth().height(250.dp)
+            )
+
+            if (dayEvents.isEmpty() && !loading) {
+                Text(
+                    "이 날짜의 조석 데이터가 없습니다. (오늘부터 약 1년 뒤까지만 제공됩니다)",
+                    color = Color.Gray, fontSize = 13.sp
+                )
+            }
+            dayEvents.forEach { e ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(
-                        Modifier.padding(16.dp).fillMaxWidth(),
+                        Modifier.padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(if (e.high) "만조" else "간조", fontSize = 18.sp,
@@ -135,6 +245,7 @@ fun TideScreen() {
                     }
                 }
             }
+        }
         }
 
         Text(TideRepository.SOURCE_TEXT, fontSize = 10.sp, color = Color.Gray, maxLines = 1)

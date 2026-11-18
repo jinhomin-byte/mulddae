@@ -94,6 +94,46 @@ object TideRepository {
         }
     }
 
+    /** 한 해 전체의 고저조(시간순). 캐시가 있으면 그것을 쓰고, 없거나 force면 내려받는다. 데이터가 없는 해는 실패(Result.failure). */
+    suspend fun loadYear(
+        c: Context, station: Station, year: Int, force: Boolean = false
+    ): Result<List<TideEvent>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val path = "${station.code}/$year.json"
+            val name = "${station.code}_$year.json"
+            lastDownloadFailed = false
+            var days = cacheFile(c, name).takeIf { it.exists() && !force }?.let {
+                runCatching { JSONObject(it.readText()).getJSONObject("days") }.getOrNull()
+            }
+            if (days == null) {
+                val now = System.currentTimeMillis()
+                val last = lastTry[name]
+                if (force || last == null || now - last >= RETRY_MS) {
+                    lastTry[name] = now
+                    days = JSONObject(fetchCached(c, path, name, 0L)).getJSONObject("days")
+                } else error("데이터를 받지 못했습니다 (잠시 후 다시 시도)")
+            }
+            val out = ArrayList<TideEvent>()
+            val keys = days!!.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val date = LocalDate.parse(key)
+                val rows = days.getJSONArray(key)
+                for (i in 0 until rows.length()) {
+                    val r = rows.getJSONArray(i)
+                    out.add(
+                        TideEvent(
+                            LocalDateTime.of(date, LocalTime.parse(r.getString(0))),
+                            r.getString(2) == "H", r.getInt(1)
+                        )
+                    )
+                }
+            }
+            out.sortBy { it.time }
+            out
+        }
+    }
+
     /** 해당 날짜의 고저조. 연도 파일만 받는다. force면 다시 내려받는다. */
     suspend fun load(
         c: Context, station: Station, date: LocalDate, force: Boolean = false
