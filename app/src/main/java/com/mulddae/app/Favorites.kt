@@ -107,7 +107,7 @@ fun FavoriteChips(
                     color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                     border = BorderStroke(
                         if (selected) 2.dp else 1.dp,
-                        if (selected) MaterialTheme.colorScheme.primary else Color.LightGray
+                        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
                     ),
                     modifier = Modifier.fillMaxWidth().combinedClickable(
                         onClick = { onSelect(s) },

@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
@@ -66,7 +67,7 @@ fun ObsTabContent(info: ObsInfo?, loading: Boolean, error: String?, salinity: Bo
         if (info.hasWtem) ObsGraph("${pre}수온 그래프", info.rows, OBS_WTEM, WTEM_COLOR, pre)
         ObsGraph("${pre}기온 그래프", info.rows, OBS_ARTMP, ARTMP_COLOR, pre)
         if (!info.hasWtem) {
-            Text("수온 관측이 없는 곳입니다.", color = Color.Gray, fontSize = 13.sp,
+            Text("수온 관측이 없는 곳입니다.", color = subColor(), fontSize = 13.sp,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp), textAlign = TextAlign.Center)
         }
     }
@@ -74,7 +75,7 @@ fun ObsTabContent(info: ObsInfo?, loading: Boolean, error: String?, salinity: Bo
 
 @Composable
 fun ObsMessage(text: String) {
-    Text(text, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+    Text(text, color = subColor(), fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
         textAlign = TextAlign.Center)
 }
 
@@ -83,14 +84,14 @@ fun ObsMessage(text: String) {
 private fun ObsCurrent(label: String, rows: List<ObsRow>, idx: Int, color: Color, unit: String, modifier: Modifier, pre: String) {
     val last = rows.lastOrNull { it.get(idx) != null }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 14.sp, color = Color.Gray)
+        Text(label, fontSize = 14.sp, color = subColor())
         Text(
             last?.get(idx)?.let { "%.1f%s".format(it, unit) } ?: "-",
             fontSize = 36.sp, fontWeight = FontWeight.Bold, color = color
         )
         Text(
             last?.time?.format(DateTimeFormatter.ofPattern("M월 d일 HH:mm")).let { if (it != null) "$it 관측" else "${pre}관측값 없음" },
-            fontSize = 12.sp, color = Color.Gray
+            fontSize = 12.sp, color = subColor()
         )
     }
 }
@@ -100,7 +101,7 @@ private fun ObsGraph(title: String, rows: List<ObsRow>, idx: Int, color: Color, 
     val points = remember(rows, idx) {
         rows.mapNotNull { r -> r.get(idx)?.let { (r.time.hour + r.time.minute / 60.0) to it } }
     }
-    Text(title, fontSize = 14.sp, color = Color.Gray)
+    Text(title, fontSize = 14.sp, color = subColor())
     if (points.isEmpty()) {
         ObsMessage("${pre}관측값이 없습니다")
     } else {
@@ -117,10 +118,11 @@ private fun niceStep(range: Double): Double {
 /** 오늘 꺾은선 그래프. points = (시각(0~24), 값). 가로는 0~24시, 세로는 값 범위에 맞춤. */
 @Composable
 private fun ObsChart(points: List<Pair<Double, Double>>, lineColor: Color, modifier: Modifier = Modifier) {
-    val grid = Color(0xFFE0E0E0)
+    val grid = gridColor()
     val leftPad = 32.dp
-    val textPaint = remember {
-        android.graphics.Paint().apply { isAntiAlias = true; color = android.graphics.Color.GRAY }
+    val subArgb = subColor().toArgb()
+    val textPaint = remember(subArgb) {
+        android.graphics.Paint().apply { isAntiAlias = true; color = subArgb }
     }
     Canvas(modifier) {
         val w = size.width

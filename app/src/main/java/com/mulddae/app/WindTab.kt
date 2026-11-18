@@ -3,7 +3,9 @@ package com.mulddae.app
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -108,7 +110,7 @@ private fun DrawScope.drawPlane(
 
 @Composable
 private fun WindMessage(text: String) {
-    Text(text, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+    Text(text, color = subColor(), fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
         textAlign = TextAlign.Center)
 }
 
@@ -147,7 +149,7 @@ fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?, isToday: Bo
                 if (sp != null) Canvas(Modifier.size(26.dp)) { drawWindsock(sp, windColor(sp)) }
                 Spacer(Modifier.width(4.dp))
                 Text(sp?.let { "%.1f m/s".format(it) } ?: "-", fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                    color = sp?.let { windColor(it) } ?: Color.Gray, maxLines = 1)
+                    color = sp?.let { windColor(it) } ?: subColor(), maxLines = 1)
             }
         }
         WindCell("순간최대", Modifier.weight(1f), lastMx?.time) {
@@ -155,7 +157,7 @@ fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?, isToday: Bo
                 if (mx != null) Canvas(Modifier.size(26.dp)) { drawWindsock(mx, windColor(mx)) }
                 Spacer(Modifier.width(4.dp))
                 Text(mx?.let { "%.1f m/s".format(it) } ?: "-", fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                    color = mx?.let { windColor(it) } ?: Color.Gray, maxLines = 1)
+                    color = mx?.let { windColor(it) } ?: subColor(), maxLines = 1)
             }
         }
         WindCell("풍향", Modifier.weight(1f), lastDir?.time) {
@@ -167,15 +169,15 @@ fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?, isToday: Bo
                 Spacer(Modifier.width(4.dp))
                 Column {
                     Text(dir?.let { windName(it) } ?: "-", fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                        color = sp?.let { windColor(it) } ?: Color.Gray, maxLines = 1)
-                    if (dir != null) Text("${dir.roundToInt()}°", fontSize = 12.sp, color = Color.Gray, maxLines = 1)
+                        color = sp?.let { windColor(it) } ?: subColor(), maxLines = 1)
+                    if (dir != null) Text("${dir.roundToInt()}°", fontSize = 12.sp, color = subColor(), maxLines = 1)
                 }
             }
         }
     }
 
     val pre = if (isToday) "오늘 " else ""
-    Text("${pre}풍속 그래프", fontSize = 14.sp, color = Color.Gray)
+    Text("${pre}풍속 그래프", fontSize = 14.sp, color = subColor())
     val points = remember(rows) {
         rows.mapNotNull { r -> r.get(OBS_WSPD)?.let { (r.time.hour + r.time.minute / 60.0) to it } }
     }
@@ -216,11 +218,11 @@ fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?, isToday: Bo
 @Composable
 private fun WindCell(label: String, modifier: Modifier, time: java.time.LocalDateTime?, content: @Composable () -> Unit) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 13.sp, color = Color.Gray)
+        Text(label, fontSize = 13.sp, color = subColor())
         content()
         Text(
             time?.format(DateTimeFormatter.ofPattern("HH:mm"))?.let { "$it 관측" } ?: "관측값 없음",
-            fontSize = 11.sp, color = Color.Gray
+            fontSize = 11.sp, color = subColor()
         )
     }
 }
@@ -236,12 +238,12 @@ private fun WindLegend() {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             WIND_STAGES.forEach { st ->
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(st.third.first, fontSize = 10.sp, color = Color.DarkGray, maxLines = 1, softWrap = false)
-                    Text(st.third.second, fontSize = 10.sp, color = Color.Gray, maxLines = 1, softWrap = false)
+                    Text(st.third.first, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
+                    Text(st.third.second, fontSize = 10.sp, color = subColor(), maxLines = 1, softWrap = false)
                 }
             }
         }
-        Text("단위 m/s", fontSize = 10.sp, color = Color.Gray, modifier = Modifier.fillMaxWidth(),
+        Text("단위 m/s", fontSize = 10.sp, color = subColor(), modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.End)
     }
 }
@@ -249,10 +251,11 @@ private fun WindLegend() {
 /** 오늘 풍속 꺾은선(중립색) + 순간최대(연한 점선). 점은 풍속 단계 색. */
 @Composable
 private fun WindChart(points: List<Pair<Double, Double>>, maxPts: List<Pair<Double, Double>>, modifier: Modifier) {
-    val grid = Color(0xFFE0E0E0)
+    val grid = gridColor()
     val neutral = Color(0xFF78909C)
-    val textPaint = remember {
-        android.graphics.Paint().apply { isAntiAlias = true; color = android.graphics.Color.GRAY }
+    val subArgb = subColor().toArgb()
+    val textPaint = remember(subArgb) {
+        android.graphics.Paint().apply { isAntiAlias = true; color = subArgb }
     }
     Canvas(modifier) {
         val w = size.width

@@ -33,7 +33,12 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) { TideScreen() } } }
+        setContent {
+            var theme by remember { mutableIntStateOf(loadTheme(this@MainActivity)) }
+            AppTheme(theme) {
+                TideScreen(theme) { theme = it; saveTheme(this@MainActivity, it) }
+            }
+        }
     }
 }
 
@@ -45,7 +50,7 @@ private class FavNote(val text: String, val undo: Pair<Int, Station>?)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TideScreen() {
+fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var station by remember { mutableStateOf(TideRepository.selectedStation(ctx)) }
     // 가운데 점선이 가리키는 시각. 그래프를 끌면 바뀐다.
@@ -232,6 +237,7 @@ fun TideScreen() {
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 OutlinedButton(
                     onClick = { menu = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ptextColor()),
                     contentPadding = PaddingValues(horizontal = 8.dp),
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "관측소 선택, ${station.name}" }
                 ) {
@@ -257,7 +263,7 @@ fun TideScreen() {
                                 val fav = favs.any { it.code == s.code }
                                 Text(
                                     if (fav) "★" else "☆", fontSize = 22.sp,
-                                    color = if (fav) STAR_COLOR else Color.Gray,
+                                    color = if (fav) STAR_COLOR else subColor(),
                                     modifier = Modifier
                                         .semantics { contentDescription = if (fav) "즐겨찾기 해제" else "즐겨찾기 추가" }
                                         .clickable { toggleFav(s) }.padding(horizontal = 6.dp)
@@ -278,11 +284,12 @@ fun TideScreen() {
                 modifier = Modifier.defaultMinSize(minWidth = 36.dp)
                     .semantics { contentDescription = if (curFav) "즐겨찾기 해제" else "즐겨찾기 추가" }
             ) {
-                Text(if (curFav) "★" else "☆", fontSize = 24.sp, color = if (curFav) STAR_COLOR else Color.Gray)
+                Text(if (curFav) "★" else "☆", fontSize = 24.sp, color = if (curFav) STAR_COLOR else subColor())
             }
             Spacer(Modifier.width(2.dp))
             OutlinedButton(
                 onClick = { viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES) },
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ptextColor()),
                 contentPadding = PaddingValues(horizontal = 8.dp)
             ) {
                 Text("현재", maxLines = 1, softWrap = false)
@@ -318,7 +325,7 @@ fun TideScreen() {
         }
         favNote?.let { n ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(n.text, fontSize = 13.sp, color = Color.Gray)
+                Text(n.text, fontSize = 13.sp, color = subColor())
                 n.undo?.let { (idx, s) ->
                     TextButton(
                         onClick = {
@@ -348,7 +355,7 @@ fun TideScreen() {
                     "${viewDate.format(dateFmt)} (${viewDate.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.KOREAN)})",
                     fontSize = 20.sp
                 )
-                Text("음력 ${m.lunarMonth}.${m.lunarDay}", fontSize = 13.sp, color = Color.Gray)
+                Text("음력 ${m.lunarMonth}.${m.lunarDay}", fontSize = 13.sp, color = subColor())
             }
             TextButton(onClick = { viewTime = viewTime.plusDays(1) }) { Text("▶") }
         }
@@ -357,7 +364,7 @@ fun TideScreen() {
             TAB_NAMES.forEachIndexed { i, name ->
                 // 수온이 없는 실측소는 '수온·기온' 탭 이름을 '기온'으로 바꾼다.
                 val label = if (i == 1 && obsInfo?.let { it.inIndex && !it.hasWtem } == true) "기온" else name
-                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(label, maxLines = 1, softWrap = false, fontSize = 11.sp) })
+                Tab(selected = tab == i, onClick = { tab = i }, selectedContentColor = ptextColor(), text = { Text(label, maxLines = 1, softWrap = false, fontSize = 11.sp) })
             }
         }
 
@@ -365,7 +372,7 @@ fun TideScreen() {
             Text("관측소 목록을 불러오지 못했습니다. 새로고침을 눌러 다시 시도하세요.",
                 color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
         }
-        notice?.let { Text(it, color = Color.Gray, fontSize = 13.sp) }
+        notice?.let { Text(it, color = subColor(), fontSize = 13.sp) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
 
@@ -383,10 +390,11 @@ fun TideScreen() {
         } else {
             val now = tideHeightAt(allEvents, viewTime)
             Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                Text(m.title(), fontSize = 28.sp, lineHeight = 32.sp, color = MaterialTheme.colorScheme.primary)
+                Text(m.title(), fontSize = 28.sp, lineHeight = 32.sp, color = ptextColor())
+                val sub = subColor()
                 Text(
                     buildAnnotatedString {
-                        withStyle(SpanStyle(color = Color.Gray)) {
+                        withStyle(SpanStyle(color = sub)) {
                             append(viewTime.format(DateTimeFormatter.ofPattern("M월 d일")))
                         }
                         withStyle(SpanStyle(color = CURRENT_LINE_COLOR, fontWeight = FontWeight.Bold)) {
@@ -410,11 +418,11 @@ fun TideScreen() {
             if (dayEvents.isEmpty() && !loading) {
                 Text(
                     "이 날짜의 조석 데이터가 없습니다.\n(오늘부터 약 1년 뒤까지만 제공됩니다)",
-                    color = Color.Gray, fontSize = 13.sp
+                    color = subColor(), fontSize = 13.sp
                 )
             }
             dayEvents.forEach { e ->
-                Card(Modifier.fillMaxWidth()) {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Row(
                         Modifier.padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -429,9 +437,12 @@ fun TideScreen() {
         }
         }
 
-        Text(
-            if (tab == 0) TideRepository.SOURCE_TEXT else ObsRepository.SOURCE_TEXT,
-            fontSize = 9.sp, color = Color.Gray, maxLines = 1
-        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (tab == 0) TideRepository.SOURCE_TEXT else ObsRepository.SOURCE_TEXT,
+                fontSize = 9.sp, color = subColor(), maxLines = 2, modifier = Modifier.weight(1f)
+            )
+            ThemeButton(themeIndex, onThemeSelect)
+        }
     }
 }

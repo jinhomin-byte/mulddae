@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -62,11 +63,12 @@ fun TideChart(
     // 데이터가 바뀌면(관측소 변경·새로고침) 말풍선을 해제한다.
     var tapTime by remember(events) { mutableStateOf<LocalDateTime?>(null) }
     val lineColor = MaterialTheme_primary()
-    val grid = Color(0xFFE0E0E0)
+    val grid = gridColor()
     val leftPad = 32.dp // 세로축 숫자가 들어가는 왼쪽 여백
 
-    val textPaint = remember {
-        android.graphics.Paint().apply { isAntiAlias = true; color = android.graphics.Color.GRAY }
+    val subArgb = subColor().toArgb()
+    val textPaint = remember(subArgb) {
+        android.graphics.Paint().apply { isAntiAlias = true; color = subArgb }
     }
     val bubbleText = remember {
         android.graphics.Paint().apply { isAntiAlias = true; color = android.graphics.Color.WHITE }
@@ -167,7 +169,7 @@ fun TideChart(
             val e = events[i]
             if (e.time > to) break
             drawCircle(
-                if (e.high) Color(0xFF1565C0) else Color(0xFFEF6C00), 4.dp.toPx(),
+                if (e.high) Color(0xFF1565C0) else Color(0xFFF57C00), 4.dp.toPx(),
                 Offset(xOf(e.time), yOf(e.heightCm.toDouble()))
             )
         }
