@@ -2,7 +2,7 @@ name: 실측 데이터 갱신
 
 on:
   schedule:
-    - cron: '0 * * * *'   # 매시 정각 (UTC 기준 매시 = KST 매시)
+    - cron: '40 * * * *'  # 매시 40분 (정시 관측값이 DT_ 약 9분, IE_ 약 31분 뒤 올라옴)
   workflow_dispatch:
 
 permissions:
