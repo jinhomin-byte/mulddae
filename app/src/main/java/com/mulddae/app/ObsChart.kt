@@ -37,6 +37,10 @@ fun ObsTabContent(info: ObsInfo?, loading: Boolean, error: String?, salinity: Bo
         else if (loading) ObsMessage("불러오는 중...")
         return
     }
+    if (!salinity && !info.inIndex) {
+        ObsMessage("수온·기온 관측이 없는 곳입니다.")
+        return
+    }
     if (!info.inIndex) {
         ObsMessage("이 관측소는 실측 자료가 없습니다")
         return
@@ -55,6 +59,10 @@ fun ObsTabContent(info: ObsInfo?, loading: Boolean, error: String?, salinity: Bo
         }
         if (info.hasWtem) ObsGraph("오늘 수온 그래프", info.rows, OBS_WTEM, WTEM_COLOR)
         ObsGraph("오늘 기온 그래프", info.rows, OBS_ARTMP, ARTMP_COLOR)
+        if (!info.hasWtem) {
+            Text("수온 관측이 없는 곳입니다.", color = Color.Gray, fontSize = 13.sp,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp), textAlign = TextAlign.Center)
+        }
     }
 }
 
