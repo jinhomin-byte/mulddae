@@ -12,6 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
@@ -210,21 +214,30 @@ fun TideScreen() {
             }
         } else {
             val now = tideHeightAt(allEvents, viewTime)
-            Text(m.title(), fontSize = 28.sp, color = MaterialTheme.colorScheme.primary)
-            Text(
-                "${viewTime.format(DateTimeFormatter.ofPattern("M월 d일 HH:mm"))}" +
-                    (if (now != null) " · 약 ${Math.round(now)} cm" else ""),
-                fontSize = 14.sp, modifier = Modifier.fillMaxWidth(),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-            TideChart(
-                events = allEvents,
-                center = viewTime,
-                onCenterChange = { viewTime = it },
-                yMin = yMin,
-                yMax = yMax,
-                modifier = Modifier.fillMaxWidth().height(250.dp)
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                Text(m.title(), fontSize = 28.sp, lineHeight = 32.sp, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = Color.Gray)) {
+                            append(viewTime.format(DateTimeFormatter.ofPattern("M월 d일")))
+                        }
+                        withStyle(SpanStyle(color = CURRENT_LINE_COLOR, fontWeight = FontWeight.Bold)) {
+                            append(" " + viewTime.format(DateTimeFormatter.ofPattern("HH:mm")))
+                            if (now != null) append(" · 약 ${Math.round(now)} cm")
+                        }
+                    },
+                    fontSize = 14.sp, lineHeight = 18.sp, modifier = Modifier.fillMaxWidth(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                TideChart(
+                    events = allEvents,
+                    center = viewTime,
+                    onCenterChange = { viewTime = it },
+                    yMin = yMin,
+                    yMax = yMax,
+                    modifier = Modifier.fillMaxWidth().height(270.dp)
+                )
+            }
 
             if (dayEvents.isEmpty() && !loading) {
                 Text(

@@ -22,6 +22,9 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
 
+/** 가운데 점선과 '시각 · 약 N cm' 글자가 함께 쓰는 빨강. */
+val CURRENT_LINE_COLOR = Color(0xFFD32F2F)
+
 /** 고저조 사이를 코사인으로 부드럽게 이은 조위(cm). 앞뒤 고저조가 없으면 null. */
 fun tideHeightAt(events: List<TideEvent>, t: LocalDateTime): Double? {
     if (events.size < 2) return null
@@ -92,7 +95,7 @@ fun TideChart(
         val h = size.height
         val lp = leftPad.toPx()
         val plotW = w - lp
-        val topPad = 30.dp.toPx() // 맨 위 줄은 말풍선 자리
+        val topPad = 18.dp.toPx() // 맨 위 줄은 말풍선 자리
         val botPad = 30.dp.toPx() // 아래 두 줄: 날짜, 시각
         val plotH = h - topPad - botPad
         val range = max(1, yMax - yMin).toFloat()
@@ -171,7 +174,7 @@ fun TideChart(
 
         // 가운데 점선(지금)
         drawLine(
-            Color(0xFFD32F2F), Offset(lp + plotW / 2f, topPad), Offset(lp + plotW / 2f, topPad + plotH),
+            CURRENT_LINE_COLOR, Offset(lp + plotW / 2f, topPad), Offset(lp + plotW / 2f, topPad + plotH),
             1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
         )
 
@@ -187,9 +190,9 @@ fun TideChart(
                 val tw = bubbleText.measureText(text)
                 val padX = 8.dp.toPx()
                 val bw = tw + padX * 2
-                val bh = 24.dp.toPx()
+                val bh = 20.dp.toPx()
                 val bx = (x - bw / 2f).coerceIn(lp, w - bw)
-                val by = 3.dp.toPx() // 그래프 맨 위 줄에 고정(곡선을 가리지 않음)
+                val by = 0f // 그래프 맨 위 줄에 고정
                 drawRoundRect(
                     Color(0xCC333333), Offset(bx, by), Size(bw, bh),
                     androidx.compose.ui.geometry.CornerRadius(6.dp.toPx())
