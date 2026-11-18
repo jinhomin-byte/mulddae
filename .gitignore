@@ -12,6 +12,8 @@ captures/
 *.keystore
 *.jks
 secrets.properties
+keystore.properties
+keystore/
 
 # 개인 작업용/재배포 제외
 claude-project-setup.zip
