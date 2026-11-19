@@ -11,7 +11,7 @@ const SOURCE = '출처: 해양수산부 국립해양조사원, 조석예보(고,
 const CONCURRENCY = 5;
 const MAX_RETRY = 3;
 const MIN_REMAINING = 300;
-const KEEP_PAST_DAYS = 7;
+const KEEP_PAST_DAYS = 30;
 
 // ---------- 설정 ----------
 function readKey() {
