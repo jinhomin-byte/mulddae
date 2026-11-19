@@ -453,7 +453,10 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
 
             if (dayEvents.isEmpty() && !loading) {
                 Text(
-                    "이 날짜의 조석 데이터가 없습니다.\n(오늘부터 약 1년 뒤까지만 제공됩니다)",
+                    if (viewDate.isBefore(LocalDate.now()))
+                        "이 날짜의 조석 데이터가 없습니다.\n과거 자료는 오늘부터 30일 전까지만 제공됩니다."
+                    else
+                        "이 날짜의 조석 데이터가 없습니다.\n(오늘부터 약 1년 뒤까지만 제공됩니다)",
                     color = subColor(), fontSize = 13.sp
                 )
             }
