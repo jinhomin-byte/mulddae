@@ -89,6 +89,12 @@ private const val SEA_COL_WIDTH_DP = 80 // 오른쪽 바다 정보 칸 폭
 private const val SEA_COL_GAP_DP = 8 // 곡선 영역과 오른쪽 칸 사이 간격
 private const val CURRENT_BAR_DP = 20f // 조류 막대 줄 높이
 private const val SEA_CUR_ALIGN_GAP_DP = 13 // 5칸 오른쪽 칸: "남서·약함"과 "관측" 사이 간격(값 줄을 막대 줄 중심에 맞추는 보정값)
+// 5칸 오른쪽 칸 줄 높이 추정(폰 글꼴 여유 포함, 단계적 생략 계산용)
+private const val SEA_ITEM_DP = 32f // 수온·기온·풍속 한 항목(라벨+값)
+private const val SEA_CUR_LABEL_DP = 14f
+private const val SEA_CUR_VALUE_DP = 18f
+private const val SEA_CUR_DIR_DP = 14f
+private const val SEA_OBS_DP = 14f
 private const val CURVE_OVERHEAD_WITH_CURRENT_DP = 129f // 5칸+조류: 막대 20dp 포함, 작아진 만·간조 줄 기준(스크린샷의 빈 띠 18dp 보정)
 private const val CURVE_OVERHEAD_DP = 125f// 곡선 외 고정 높이(윗줄·알약·4칸·패딩, 에뮬레이터 측정값)
 
@@ -185,12 +191,15 @@ class TideWidget : GlanceAppWidget() {
             val sea = data.sea
             val size = LocalSize.current // Exact 모드: 위젯의 실제 크기
             val showSea = sea != null && size.width.value >= SEA_COL_MIN_WIDTH_DP
+            // 시스템 글꼴 배율로 나눠 글자의 시각적 크기를 고정(1.0 미만이면 그대로)
+            val fontScale = androidx.glance.LocalContext.current.resources.configuration.fontScale.coerceAtLeast(1f)
+            fun fs(base: Float) = (base / fontScale).sp
             // 오른쪽 칸이 들어가면 왼쪽이 좁아지므로 글자·패딩을 조금 줄인다
-            val pillSp = if (showSea) 11.sp else 12.sp
+            val pillSp = if (showSea) fs(11f) else fs(12f)
             val pillPad = if (showSea) 6.dp else 10.dp
             val cur = data.cur
-            val slotTimeSp = if (cur != null) 11.sp else if (showSea) 13.sp else 15.sp
-            val slotSubSp = if (cur != null) 8.sp else if (showSea) 9.sp else 10.sp
+            val slotTimeSp = if (cur != null) fs(11f) else if (showSea) fs(13f) else fs(15f)
+            val slotSubSp = if (cur != null) fs(8f) else if (showSea) fs(9f) else fs(10f)
             val slotPadV = if (cur != null) 1.dp else 2.dp
             val pal = WIDGET_PALETTES[(prefs[WIDGET_THEME_KEY] ?: fallbackTheme).coerceIn(0, THEME_COUNT - 1)]
             val white = ColorProvider(pal.fg)
@@ -223,18 +232,18 @@ class TideWidget : GlanceAppWidget() {
                     Row(GlanceModifier.defaultWeight(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             station.name,
-                            style = TextStyle(color = white, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                            style = TextStyle(color = white, fontSize = fs(14f), fontWeight = FontWeight.Bold),
                             maxLines = 1
                         )
                         Text(
                             " · 음력 ${m.lunarMonth}.${m.lunarDay}",
-                            style = TextStyle(color = sub, fontSize = 12.sp),
+                            style = TextStyle(color = sub, fontSize = fs(12f)),
                             maxLines = 1
                         )
                     }
                     Text(
                         "${m.number}물",
-                        style = TextStyle(color = ColorProvider(pal.accent), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        style = TextStyle(color = ColorProvider(pal.accent), fontSize = fs(14f), fontWeight = FontWeight.Bold)
                     )
                     Spacer(GlanceModifier.width(6.dp))
                     Box(
@@ -255,7 +264,7 @@ class TideWidget : GlanceAppWidget() {
 
                 if (todayEvents.isEmpty() || bitmap == null) {
                     Spacer(GlanceModifier.height(8.dp))
-                    Text("데이터 없음 (새로고침 눌러 보세요)", style = TextStyle(color = sub, fontSize = 12.sp))
+                    Text("데이터 없음 (새로고침 눌러 보세요)", style = TextStyle(color = sub, fontSize = fs(12f)))
                 } else {
                     Spacer(GlanceModifier.height(4.dp))
                     // 알약
@@ -292,7 +301,7 @@ class TideWidget : GlanceAppWidget() {
                         ) {
                             Text(
                                 "조류 ${cur.speedMsText} m/s ",
-                                style = TextStyle(color = ColorProvider(pal.down), fontSize = 10.5.sp, fontWeight = FontWeight.Bold),
+                                style = TextStyle(color = ColorProvider(pal.down), fontSize = fs(10.5f), fontWeight = FontWeight.Bold),
                                 maxLines = 1
                             )
                             if (arrowBitmap != null) {
@@ -304,7 +313,7 @@ class TideWidget : GlanceAppWidget() {
                             }
                             Text(
                                 " ${cur.dirName} · ${cur.strength}",
-                                style = TextStyle(color = sub, fontSize = 10.5.sp),
+                                style = TextStyle(color = sub, fontSize = fs(10.5f)),
                                 maxLines = 1
                             )
                         }
@@ -365,13 +374,20 @@ class TideWidget : GlanceAppWidget() {
                 Column(GlanceModifier.width(SEA_COL_WIDTH_DP.dp).fillMaxHeight()) {
                     @androidx.compose.runtime.Composable
                     fun item(label: String, value: String, color: Color) {
-                        Text(label, style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1)
+                        Text(label, style = TextStyle(color = sub, fontSize = fs(10f)), maxLines = 1)
                         Text(
                             value,
-                            style = TextStyle(color = ColorProvider(color), fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                            style = TextStyle(color = ColorProvider(color), fontSize = fs(14f), fontWeight = FontWeight.Bold),
                             maxLines = 1
                         )
                     }
+                    // 높이 부족 시 단계적 생략: 먼저 "관측" 줄, 그래도 모자라면 조류 "방위·세기" 줄
+                    val topCount = listOf(sea.wtem, sea.artmp, sea.wspd).count { it != null }
+                    val availDp = size.height.value - 20f
+                    val topDp = topCount * SEA_ITEM_DP
+                    val curFull = if (cur != null) SEA_CUR_LABEL_DP + SEA_CUR_VALUE_DP + SEA_CUR_DIR_DP + SEA_CUR_ALIGN_GAP_DP else 0f
+                    val showObs = topDp + curFull + SEA_OBS_DP <= availDp
+                    val showDir = showObs || topDp + curFull <= availDp
                     Column(GlanceModifier.defaultWeight()) {
                         if (sea.wtem != null) item("수온", "%.1f°C".format(Locale.US, sea.wtem), pal.accent)
                         if (sea.artmp != null) item("기온", "%.1f°C".format(Locale.US, sea.artmp), pal.down)
@@ -379,11 +395,11 @@ class TideWidget : GlanceAppWidget() {
                     }
                     if (cur != null) {
                         // 조류 블록: 바닥 기준으로 쌓아 값 줄이 왼쪽 조류 막대 줄과 같은 높이에 오게 한다
-                        Text("조류", style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1)
+                        Text("조류", style = TextStyle(color = sub, fontSize = fs(10f)), maxLines = 1)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "${cur.speedMsText} m/s",
-                                style = TextStyle(color = ColorProvider(pal.down), fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                style = TextStyle(color = ColorProvider(pal.down), fontSize = fs(14f), fontWeight = FontWeight.Bold),
                                 maxLines = 1
                             )
                             if (arrowBitmap != null) {
@@ -395,16 +411,20 @@ class TideWidget : GlanceAppWidget() {
                                 )
                             }
                         }
-                        Text(
-                            "${cur.dirName} · ${cur.strength}",
-                            style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1
-                        )
+                        if (showDir) {
+                            Text(
+                                "${cur.dirName} · ${cur.strength}",
+                                style = TextStyle(color = sub, fontSize = fs(10f)), maxLines = 1
+                            )
+                        }
                         Spacer(GlanceModifier.height(SEA_CUR_ALIGN_GAP_DP.dp))
                     }
-                    Text(
-                        "관측 %02d:%02d".format(sea.time.hour, sea.time.minute),
-                        style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1
-                    )
+                    if (showObs) {
+                        Text(
+                            "관측 %02d:%02d".format(sea.time.hour, sea.time.minute),
+                            style = TextStyle(color = sub, fontSize = fs(10f)), maxLines = 1
+                        )
+                    }
                 }
             }
             }
