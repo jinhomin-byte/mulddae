@@ -87,7 +87,9 @@ private val SMALL_SIZE = DpSize(250.dp, 110.dp) // 4x2
 private const val SEA_COL_MIN_WIDTH_DP = 270f // 이 폭 이상이면 오른쪽에 바다 정보 칸 표시(폰 5칸=289dp)
 private const val SEA_COL_WIDTH_DP = 80 // 오른쪽 바다 정보 칸 폭
 private const val SEA_COL_GAP_DP = 8 // 곡선 영역과 오른쪽 칸 사이 간격
-private const val CURVE_OVERHEAD_DP = 125f // 곡선 외 고정 높이(윗줄·알약·4칸·패딩, 에뮬레이터 측정값)
+private const val CURRENT_BAR_DP = 20f // 조류 막대 줄 높이
+private const val CURVE_OVERHEAD_WITH_CURRENT_DP = 129f // 5칸+조류: 막대 20dp 포함, 작아진 만·간조 줄 기준(스크린샷의 빈 띠 18dp 보정)
+private const val CURVE_OVERHEAD_DP = 125f// 곡선 외 고정 높이(윗줄·알약·4칸·패딩, 에뮬레이터 측정값)
 
 /** 위젯 오른쪽 칸에 보여줄 가장 최근 실측값. */
 private class SeaInfo(val wtem: Double?, val artmp: Double?, val wspd: Double?, val time: LocalDateTime)
@@ -110,7 +112,8 @@ private class WidgetData(
     val slots: List<TideEvent>,
     val yMin: Int,
     val yMax: Int,
-    val sea: SeaInfo?
+    val sea: SeaInfo?,
+    val cur: CurrentInfo?
 )
 
 private suspend fun loadWidgetData(context: Context, station: Station): WidgetData {
@@ -140,7 +143,9 @@ private suspend fun loadWidgetData(context: Context, station: Station): WidgetDa
     } catch (e: Exception) {
         null
     }
-    return WidgetData(station, today, now, all, todayEvents, slots, yMin, yMax, sea)
+    // 조류는 없거나 실패하면 null(조용히 숨김). CancellationException은 infoFor가 다시 던진다.
+    val cur = CurrentRepository.infoFor(context, station.code, now)
+    return WidgetData(station, today, now, all, todayEvents, slots, yMin, yMax, sea, cur)
 }
 
 class TideWidget : GlanceAppWidget() {
@@ -182,18 +187,26 @@ class TideWidget : GlanceAppWidget() {
             // 오른쪽 칸이 들어가면 왼쪽이 좁아지므로 글자·패딩을 조금 줄인다
             val pillSp = if (showSea) 11.sp else 12.sp
             val pillPad = if (showSea) 6.dp else 10.dp
-            val slotTimeSp = if (showSea) 13.sp else 15.sp
-            val slotSubSp = if (showSea) 9.sp else 10.sp
+            val cur = data.cur
+            val slotTimeSp = if (cur != null) 11.sp else if (showSea) 13.sp else 15.sp
+            val slotSubSp = if (cur != null) 8.sp else if (showSea) 9.sp else 10.sp
+            val slotPadV = if (cur != null) 1.dp else 2.dp
             val pal = WIDGET_PALETTES[(prefs[WIDGET_THEME_KEY] ?: fallbackTheme).coerceIn(0, THEME_COUNT - 1)]
             val white = ColorProvider(pal.fg)
             val sub = ColorProvider(pal.sub)
             val faint = ColorProvider(pal.fg.copy(alpha = 0.10f))
             // 곡선 영역 크기(폭: 위젯 폭 - 좌우 패딩 - 오른쪽 칸, 높이: 위젯 높이 - 고정 높이)에 맞춰 그려 점이 원으로 보이게 한다
             val curveWDp = size.width.value - 20f - (if (showSea) (SEA_COL_WIDTH_DP + SEA_COL_GAP_DP).toFloat() else 0f)
-            val curveHDp = (size.height.value - CURVE_OVERHEAD_DP).coerceIn(30f, 120f)
+            // 조류가 있으면 5칸은 막대 줄(20dp)만큼, 4칸은 한 줄(약 14dp)만큼 곡선을 줄인다
+            val overheadDp = if (cur == null) CURVE_OVERHEAD_DP else if (showSea) CURVE_OVERHEAD_WITH_CURRENT_DP else CURVE_OVERHEAD_DP + 14f
+            val curveHDp = (size.height.value - overheadDp).coerceIn(30f, 120f)
             val bitmap = if (todayEvents.isNotEmpty()) {
                 drawCurve(all, today, now, yMin, yMax, pal, (curveWDp * 2.6f).toInt().coerceAtLeast(100), (curveHDp * 2.6f).toInt())
             } else null
+            val barBitmap = if (cur != null && showSea) {
+                drawCurrentBars(cur, pal, (curveWDp * 2.6f).toInt().coerceAtLeast(100), (CURRENT_BAR_DP * 2.6f).toInt())
+            } else null
+            val arrowBitmap = if (cur != null && cur.dirIndex >= 0) drawArrow(cur.dirIndex, pal.down) else null
             val transparency = (prefs[WIDGET_TRANSPARENCY_KEY] ?: fallbackTransparency).coerceIn(0, 100)
             val bgMod = GlanceModifier.background(ColorProvider(pal.bg.copy(alpha = (100 - transparency) / 100f)))
             Row(
@@ -270,6 +283,31 @@ class TideWidget : GlanceAppWidget() {
                             )
                         }
                     }
+                    // 4칸: 알약 아래 조류 한 줄
+                    if (cur != null && !showSea) {
+                        Row(
+                            GlanceModifier.fillMaxWidth().padding(top = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "조류 ${cur.speedMsText} m/s ",
+                                style = TextStyle(color = ColorProvider(pal.down), fontSize = 10.5.sp, fontWeight = FontWeight.Bold),
+                                maxLines = 1
+                            )
+                            if (arrowBitmap != null) {
+                                Image(
+                                    provider = ImageProvider(arrowBitmap),
+                                    contentDescription = "조류 방향",
+                                    modifier = GlanceModifier.size(12.dp)
+                                )
+                            }
+                            Text(
+                                " ${cur.dirName} · ${cur.strength}",
+                                style = TextStyle(color = sub, fontSize = 10.5.sp),
+                                maxLines = 1
+                            )
+                        }
+                    }
                     // 곡선
                     Image(
                         provider = ImageProvider(bitmap),
@@ -277,6 +315,15 @@ class TideWidget : GlanceAppWidget() {
                         contentScale = ContentScale.Fit,
                         modifier = GlanceModifier.fillMaxWidth().defaultWeight()
                     )
+                    // 5칸: 조류 막대 줄(시간별 최대 유속)
+                    if (barBitmap != null) {
+                        Image(
+                            provider = ImageProvider(barBitmap),
+                            contentDescription = "오늘 시간별 조류 세기",
+                            contentScale = ContentScale.FillBounds,
+                            modifier = GlanceModifier.fillMaxWidth().height(CURRENT_BAR_DP.dp)
+                        )
+                    }
                     // 고저조 칸
                     Row(GlanceModifier.fillMaxWidth()) {
                         slots.forEach { e ->
@@ -284,7 +331,7 @@ class TideWidget : GlanceAppWidget() {
                             val isNext = next != null && e.time == next.time
                             val a = if (past) 0.5f else 1f
                             val c = (if (e.high) pal.accent else pal.down).copy(alpha = a)
-                            val mod = GlanceModifier.defaultWeight().padding(vertical = 2.dp).let {
+                            val mod = GlanceModifier.defaultWeight().padding(vertical = slotPadV).let {
                                 if (isNext) it.background(faint).cornerRadius(8.dp)
                                 else it
                             }
@@ -328,6 +375,28 @@ class TideWidget : GlanceAppWidget() {
                         if (sea.wtem != null) item("수온", "%.1f°C".format(Locale.US, sea.wtem), pal.accent)
                         if (sea.artmp != null) item("기온", "%.1f°C".format(Locale.US, sea.artmp), pal.down)
                         if (sea.wspd != null) item("풍속", "%.1f m/s".format(Locale.US, sea.wspd), pal.fg)
+                        if (cur != null) {
+                            Text("조류", style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "${cur.speedMsText} m/s",
+                                    style = TextStyle(color = ColorProvider(pal.down), fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                    maxLines = 1
+                                )
+                                if (arrowBitmap != null) {
+                                    Spacer(GlanceModifier.width(2.dp))
+                                    Image(
+                                        provider = ImageProvider(arrowBitmap),
+                                        contentDescription = "조류 방향",
+                                        modifier = GlanceModifier.size(14.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                "${cur.dirName} · ${cur.strength}",
+                                style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1
+                            )
+                        }
                     }
                     Text(
                         "관측 %02d:%02d".format(sea.time.hour, sea.time.minute),
@@ -338,6 +407,39 @@ class TideWidget : GlanceAppWidget() {
             }
         }
     }
+}
+
+/** 조류 막대 줄: 24개 막대(시간별 최대 유속), 높이는 지점 maxCrsp 대비, 지금 시각만 진하게. */
+private fun drawCurrentBars(cur: CurrentInfo, pal: WidgetPalette, w: Int, h: Int): Bitmap {
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val cv = Canvas(bmp)
+    val ref = if (cur.maxCrsp > 0) cur.maxCrsp else (cur.hourlyMax.maxOrNull() ?: 0.0).coerceAtLeast(1.0)
+    val slotW = w / 24f
+    val barW = slotW * 0.7f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    cur.hourlyMax.forEachIndexed { i, v ->
+        val bh = (h * (v / ref).coerceIn(0.0, 1.0)).toFloat().coerceAtLeast(3f)
+        paint.color = pal.down.copy(alpha = if (i == cur.hourIndex) 1f else 0.35f).toArgb()
+        val x = i * slotW + (slotW - barW) / 2
+        cv.drawRoundRect(x, h - bh, x + barW, h.toFloat(), 2f, 2f, paint)
+    }
+    return bmp
+}
+
+/** 유향 인덱스(0=북, 16방위, 흐르는 쪽)에 맞게 회전한 화살표 비트맵(약 24dp). */
+private fun drawArrow(dirIndex: Int, color: Color): Bitmap {
+    val s = 64
+    val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+    val cv = Canvas(bmp)
+    cv.rotate(dirIndex * 22.5f, s / 2f, s / 2f)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color.toArgb() }
+    val head = Path().apply { // 위(북)를 향한 화살표
+        moveTo(s / 2f, 4f); lineTo(s * 0.82f, s * 0.46f); lineTo(s * 0.60f, s * 0.46f)
+        lineTo(s * 0.60f, s - 6f); lineTo(s * 0.40f, s - 6f); lineTo(s * 0.40f, s * 0.46f)
+        lineTo(s * 0.18f, s * 0.46f); close()
+    }
+    cv.drawPath(head, paint)
+    return bmp
 }
 
 private fun remainText(now: LocalDateTime, t: LocalDateTime): String {
@@ -411,6 +513,7 @@ class RefreshCallback : ActionCallback {
                 val st = TideRepository.selectedStation(context)
                 TideRepository.load(context, st, LocalDate.now(), force = true)
                 ObsRepository.load(context, st, force = true)
+                CurrentRepository.infoFor(context, st.code, force = true)
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -458,6 +561,7 @@ class WidgetRefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWor
         val r = TideRepository.load(applicationContext, st, LocalDate.now())
         try {
             ObsRepository.load(applicationContext, st) // 실측 캐시 갱신(실패해도 무시)
+            CurrentRepository.infoFor(applicationContext, st.code) // 조류 캐시 갱신(실패해도 무시)
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
             throw e
         } catch (e: Exception) {
