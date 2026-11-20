@@ -8,7 +8,10 @@ import android.graphics.Paint
 import android.graphics.Path
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.glance.LocalSize
+import androidx.glance.layout.fillMaxHeight
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -56,6 +59,7 @@ import androidx.work.WorkerParameters
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -65,8 +69,25 @@ val WIDGET_THEME_KEY = intPreferencesKey("widget_theme")
 /** 위젯 투명도(0=불투명, 100=완전 투명)를 Glance 상태에 저장하는 키. */
 val WIDGET_TRANSPARENCY_KEY = intPreferencesKey("widget_transparency")
 
+private val SMALL_SIZE = DpSize(250.dp, 110.dp) // 4x2
+private val WIDE_SIZE = DpSize(340.dp, 110.dp) // 5x2 이상: 오른쪽에 바다 정보 칸
+private const val SEA_COL_WIDTH_DP = 84 // 오른쪽 바다 정보 칸 폭
+private const val SEA_COL_GAP_DP = 10 // 곡선 영역과 오른쪽 칸 사이 간격
+private const val CURVE_OVERHEAD_DP = 125f // 곡선 외 고정 높이(윗줄·알약·4칸·패딩, 에뮬레이터 측정값)
+
+/** 위젯 오른쪽 칸에 보여줄 가장 최근 실측값. */
+private class SeaInfo(val wtem: Double?, val artmp: Double?, val wspd: Double?, val time: LocalDateTime)
+
+private fun latestSea(info: ObsInfo?): SeaInfo? {
+    val rows = info?.rows ?: return null
+    if (rows.isEmpty()) return null
+    fun last(i: Int) = rows.lastOrNull { it.get(i) != null }?.get(i)
+    val s = SeaInfo(last(OBS_WTEM), last(OBS_ARTMP), last(OBS_WSPD), rows.last().time)
+    return if (s.wtem == null && s.artmp == null && s.wspd == null) null else s
+}
+
 class TideWidget : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Single
+    override val sizeMode = SizeMode.Exact
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -94,22 +115,39 @@ class TideWidget : GlanceAppWidget() {
         val start = if (todayEvents.size <= 4) 0 else minOf(nextIdx, todayEvents.size - 4)
         val slots = todayEvents.drop(start).take(4)
 
+        // 실측은 한 번만 읽고 재사용(실패하면 오른쪽 칸 숨김)
+        val sea = try {
+            latestSea(ObsRepository.load(context, station).getOrNull())
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+
         provideContent {
             val prefs = currentState<Preferences>()
+            val size = LocalSize.current // Exact 모드: 위젯의 실제 크기
+            val showSea = sea != null && size.width >= WIDE_SIZE.width
             val pal = WIDGET_PALETTES[(prefs[WIDGET_THEME_KEY] ?: fallbackTheme).coerceIn(0, THEME_COUNT - 1)]
             val white = ColorProvider(pal.fg)
             val sub = ColorProvider(pal.sub)
             val faint = ColorProvider(pal.fg.copy(alpha = 0.10f))
-            val bitmap = if (todayEvents.isNotEmpty()) drawCurve(all, today, now, yMin, yMax, pal) else null
+            // 곡선 영역 크기(폭: 위젯 폭 - 좌우 패딩 - 오른쪽 칸, 높이: 위젯 높이 - 고정 높이)에 맞춰 그려 점이 원으로 보이게 한다
+            val curveWDp = size.width.value - 20f - (if (showSea) (SEA_COL_WIDTH_DP + SEA_COL_GAP_DP).toFloat() else 0f)
+            val curveHDp = (size.height.value - CURVE_OVERHEAD_DP).coerceIn(30f, 120f)
+            val bitmap = if (todayEvents.isNotEmpty()) {
+                drawCurve(all, today, now, yMin, yMax, pal, (curveWDp * 2.6f).toInt().coerceAtLeast(100), (curveHDp * 2.6f).toInt())
+            } else null
             val transparency = (prefs[WIDGET_TRANSPARENCY_KEY] ?: fallbackTransparency).coerceIn(0, 100)
             val bgMod = GlanceModifier.background(ColorProvider(pal.bg.copy(alpha = (100 - transparency) / 100f)))
-            Column(
+            Row(
                 GlanceModifier.fillMaxSize()
                     .then(bgMod)
                     .cornerRadius(20.dp)
                     .padding(10.dp)
                     .clickable(actionStartActivity<MainActivity>())
             ) {
+            Column(GlanceModifier.defaultWeight().fillMaxHeight()) {
                 // 윗줄
                 Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Row(GlanceModifier.defaultWeight(), verticalAlignment = Alignment.CenterVertically) {
@@ -174,7 +212,7 @@ class TideWidget : GlanceAppWidget() {
                     Image(
                         provider = ImageProvider(bitmap),
                         contentDescription = "오늘 조석 곡선",
-                        contentScale = ContentScale.FillBounds,
+                        contentScale = ContentScale.Fit,
                         modifier = GlanceModifier.fillMaxWidth().defaultWeight()
                     )
                     // 고저조 칸
@@ -212,6 +250,30 @@ class TideWidget : GlanceAppWidget() {
                     }
                 }
             }
+            if (showSea) {
+                Spacer(GlanceModifier.width(SEA_COL_GAP_DP.dp))
+                Column(GlanceModifier.width(SEA_COL_WIDTH_DP.dp).fillMaxHeight()) {
+                    @androidx.compose.runtime.Composable
+                    fun item(label: String, value: String, color: Color) {
+                        Text(label, style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1)
+                        Text(
+                            value,
+                            style = TextStyle(color = ColorProvider(color), fontSize = 17.sp, fontWeight = FontWeight.Bold),
+                            maxLines = 1
+                        )
+                    }
+                    Column(GlanceModifier.defaultWeight()) {
+                        if (sea.wtem != null) item("수온", "%.1f°C".format(Locale.US, sea.wtem), pal.accent)
+                        if (sea.artmp != null) item("기온", "%.1f°C".format(Locale.US, sea.artmp), pal.down)
+                        if (sea.wspd != null) item("풍속", "%.1f m/s".format(Locale.US, sea.wspd), pal.fg)
+                    }
+                    Text(
+                        "관측 %02d:%02d".format(sea.time.hour, sea.time.minute),
+                        style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1
+                    )
+                }
+            }
+            }
         }
     }
 }
@@ -224,9 +286,7 @@ private fun remainText(now: LocalDateTime, t: LocalDateTime): String {
 }
 
 /** 앱 조위 탭과 같은 식(고저조 사이 코사인)으로 오늘 0~24시를 그린 비트맵. */
-private fun drawCurve(events: List<TideEvent>, day: LocalDate, now: LocalDateTime, yMin: Int, yMax: Int, pal: WidgetPalette): Bitmap {
-    val w = 600
-    val h = 120
+private fun drawCurve(events: List<TideEvent>, day: LocalDate, now: LocalDateTime, yMin: Int, yMax: Int, pal: WidgetPalette, w: Int, h: Int): Bitmap {
     val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
     val cv = Canvas(bmp)
     val padY = 10f
@@ -270,7 +330,7 @@ private fun drawCurve(events: List<TideEvent>, day: LocalDate, now: LocalDateTim
     // 지금 시각 세로선과 점
     if (now.toLocalDate() == day) {
         val x = (Duration.between(start, now).seconds / (24 * 3600.0) * w).toFloat()
-        val vp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pal.fg.copy(alpha = 0.55f).toArgb(); strokeWidth = 2f }
+        val vp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pal.fg.copy(alpha = 0.55f).toArgb(); strokeWidth = 2f; pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 8f), 0f) }
         cv.drawLine(x, 0f, x, h.toFloat(), vp)
         tideHeightAt(events, now)?.let {
             val dp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pal.down.toArgb() }
@@ -286,7 +346,9 @@ class RefreshCallback : ActionCallback {
         if (!running.compareAndSet(false, true)) return // 누르는 동안 중복 실행 방지
         try {
             try {
-                TideRepository.load(context, TideRepository.selectedStation(context), LocalDate.now(), force = true)
+                val st = TideRepository.selectedStation(context)
+                TideRepository.load(context, st, LocalDate.now(), force = true)
+                ObsRepository.load(context, st, force = true)
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -325,9 +387,14 @@ class TideWidgetReceiver : GlanceAppWidgetReceiver() {
 class WidgetRefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         // 1시간마다: 캐시로 다시 그린다("N분 후"·지금선 갱신). 캐시에 오늘이 없으면 load가 내려받는다.
-        val r = TideRepository.load(
-            applicationContext, TideRepository.selectedStation(applicationContext), LocalDate.now()
-        )
+        val st = TideRepository.selectedStation(applicationContext)
+        val r = TideRepository.load(applicationContext, st, LocalDate.now())
+        try {
+            ObsRepository.load(applicationContext, st) // 실측 캐시 갱신(실패해도 무시)
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+        }
         val failed = r.isFailure
         TideWidget().updateAll(applicationContext)
         return if (failed) Result.retry() else Result.success()
