@@ -30,5 +30,17 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/tide_widget_info" />
         </receiver>
+
+        <receiver
+            android:name=".TideWidgetReceiver4x2"
+            android:label="@string/app_name_oneline"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tide_widget_info_4x2" />
+        </receiver>
     </application>
 </manifest>

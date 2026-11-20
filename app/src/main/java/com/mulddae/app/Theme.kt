@@ -102,6 +102,25 @@ suspend fun applyWidgetTransparency(c: Context, v: Int) {
     }
 }
 
+/** 모든 위젯(4x2·5x2)의 상태에 갱신 시각을 써서 강제로 다시 그린다(관측소 변경·새로고침용). */
+suspend fun refreshAllWidgets(c: Context) {
+    val manager = GlanceAppWidgetManager(c)
+    manager.getGlanceIds(TideWidget::class.java).forEach { id ->
+        try {
+            val code = TideRepository.selectedStation(c).code
+            updateAppWidgetState(c, id) {
+                it[WIDGET_STATION_KEY] = code
+                it[WIDGET_REFRESH_KEY] = System.currentTimeMillis()
+            }
+            TideWidget().update(c, id)
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // 방금 지워진 위젯 등: 건너뛰고 나머지 계속
+        }
+    }
+}
+
 /** 위젯 테마 번호를 Glance 상태에도 저장하고 다시 그린다(살아 있는 세션에도 즉시 적용). */
 suspend fun applyWidgetTheme(c: Context, i: Int) {
     saveTheme(c, i)

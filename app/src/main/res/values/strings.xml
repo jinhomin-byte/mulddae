@@ -3,4 +3,6 @@
     <string name="app_name">Only 물때표</string>
     <string name="app_name_oneline">Only 물때표</string>
     <string name="widget_desc">오늘의 물때와 만조·간조 시각</string>
+    <string name="widget_desc_4x2">오늘의 물때와 만조·간조 시각(작은 크기)</string>
+    <string name="widget_desc_5x2">수온·기온·풍속까지 보는 큰 크기</string>
 </resources>

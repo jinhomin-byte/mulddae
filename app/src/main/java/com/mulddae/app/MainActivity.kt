@@ -174,6 +174,8 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
         editCode = null
         error = null
         notice = null
+        // 이미 받아 둔 데이터여도 위젯은 새 관측소로 바로 다시 그린다(캐시가 없으면 로드 성공 뒤 한 번 더 갱신).
+        refreshAllWidgets(ctx)
     }
     LaunchedEffect(station, yearFrom, yearTo, tick) {
         val force = forceNext // 한 번 읽고 바로 리셋
@@ -201,7 +203,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                     error = r.exceptionOrNull()?.message
                 }
             }
-            if (currentYearOk || (force && anyOk)) TideWidget().updateAll(ctx)
+            if (currentYearOk || (force && anyOk)) refreshAllWidgets(ctx)
         } finally {
             loading = false
         }

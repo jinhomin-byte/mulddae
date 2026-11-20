@@ -11,6 +11,13 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.LocalSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.glance.layout.fillMaxHeight
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -69,10 +76,16 @@ val WIDGET_THEME_KEY = intPreferencesKey("widget_theme")
 /** 위젯 투명도(0=불투명, 100=완전 투명)를 Glance 상태에 저장하는 키. */
 val WIDGET_TRANSPARENCY_KEY = intPreferencesKey("widget_transparency")
 
+/** 마지막 강제 갱신 시각(epoch ms). 상태를 바꿔 살아 있는 세션도 다시 그리게 하는 용도. */
+val WIDGET_REFRESH_KEY = androidx.datastore.preferences.core.longPreferencesKey("widget_refresh")
+
+/** 위젯이 표시 중인 관측소 코드. 바뀌면 살아 있는 세션이 데이터를 다시 읽는다. */
+val WIDGET_STATION_KEY = androidx.datastore.preferences.core.stringPreferencesKey("widget_station")
+
 private val SMALL_SIZE = DpSize(250.dp, 110.dp) // 4x2
-private val WIDE_SIZE = DpSize(340.dp, 110.dp) // 5x2 이상: 오른쪽에 바다 정보 칸
-private const val SEA_COL_WIDTH_DP = 84 // 오른쪽 바다 정보 칸 폭
-private const val SEA_COL_GAP_DP = 10 // 곡선 영역과 오른쪽 칸 사이 간격
+private const val SEA_COL_MIN_WIDTH_DP = 270f // 이 폭 이상이면 오른쪽에 바다 정보 칸 표시(폰 5칸=289dp)
+private const val SEA_COL_WIDTH_DP = 80 // 오른쪽 바다 정보 칸 폭
+private const val SEA_COL_GAP_DP = 8 // 곡선 영역과 오른쪽 칸 사이 간격
 private const val CURVE_OVERHEAD_DP = 125f // 곡선 외 고정 높이(윗줄·알약·4칸·패딩, 에뮬레이터 측정값)
 
 /** 위젯 오른쪽 칸에 보여줄 가장 최근 실측값. */
@@ -86,48 +99,90 @@ private fun latestSea(info: ObsInfo?): SeaInfo? {
     return if (s.wtem == null && s.artmp == null && s.wspd == null) null else s
 }
 
+/** 위젯이 그릴 데이터 묶음(관측소 이름과 값을 함께 교체하려고 한 덩어리로 둔다). */
+private class WidgetData(
+    val station: Station,
+    val today: LocalDate,
+    val now: LocalDateTime,
+    val all: List<TideEvent>,
+    val todayEvents: List<TideEvent>,
+    val slots: List<TideEvent>,
+    val yMin: Int,
+    val yMax: Int,
+    val sea: SeaInfo?
+)
+
+private suspend fun loadWidgetData(context: Context, station: Station): WidgetData {
+    val today = LocalDate.now()
+    val now = LocalDateTime.now()
+    val yesterday = TideRepository.load(context, station, today.minusDays(1)).getOrDefault(emptyList())
+    val todayEvents = TideRepository.load(context, station, today).getOrDefault(emptyList())
+    val tomorrow = TideRepository.load(context, station, today.plusDays(1)).getOrDefault(emptyList())
+    val all = (yesterday + todayEvents + tomorrow).sortedBy { it.time }
+
+    // 세로 범위: 올해 연중 최소·최대(앱과 같은 방식), 없으면 그날 값
+    val yearEvents = TideRepository.loadYear(context, station, today.year).getOrDefault(emptyList())
+    val rangeSrc = yearEvents.ifEmpty { all }
+    val yMin = if (rangeSrc.isEmpty()) -100 else Math.floorDiv(rangeSrc.minOf { it.heightCm } - 10, 100) * 100
+    val yMax = if (rangeSrc.isEmpty()) 1000 else -Math.floorDiv(-(rangeSrc.maxOf { it.heightCm } + 10), 100) * 100
+
+    // 칸: 4개 이하면 전부, 초과면 다음 것 위주 4개
+    val nextIdx = todayEvents.indexOfFirst { it.time.isAfter(now) }.let { if (it < 0) todayEvents.size else it }
+    val start = if (todayEvents.size <= 4) 0 else minOf(nextIdx, todayEvents.size - 4)
+    val slots = todayEvents.drop(start).take(4)
+
+    // 실측은 한 번만 읽고 재사용(실패하면 오른쪽 칸 숨김)
+    val sea = try {
+        latestSea(ObsRepository.load(context, station).getOrNull())
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+    return WidgetData(station, today, now, all, todayEvents, slots, yMin, yMax, sea)
+}
+
 class TideWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Exact
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val station = TideRepository.selectedStation(context)
-        val today = LocalDate.now()
-        val now = LocalDateTime.now()
-        val yesterday = TideRepository.load(context, station, today.minusDays(1)).getOrDefault(emptyList())
-        val todayEvents = TideRepository.load(context, station, today).getOrDefault(emptyList())
-        val tomorrow = TideRepository.load(context, station, today.plusDays(1)).getOrDefault(emptyList())
-        val all = (yesterday + todayEvents + tomorrow).sortedBy { it.time }
-        val m = mulddaeOf(today)
         val fallbackTransparency = loadWidgetTransparency(context)
-
-        // 세로 범위: 올해 연중 최소·최대(앱과 같은 방식), 없으면 그날 값
-        val yearEvents = TideRepository.loadYear(context, station, today.year).getOrDefault(emptyList())
-        val rangeSrc = yearEvents.ifEmpty { all }
-        val yMin = if (rangeSrc.isEmpty()) -100 else Math.floorDiv(rangeSrc.minOf { it.heightCm } - 10, 100) * 100
-        val yMax = if (rangeSrc.isEmpty()) 1000 else -Math.floorDiv(-(rangeSrc.maxOf { it.heightCm } + 10), 100) * 100
-
-        val next = all.firstOrNull { it.time.isAfter(now) }
         val fallbackTheme = loadTheme(context)
-
-        // 칸: 4개 이하면 전부, 초과면 다음 것 위주 4개
-        val nextIdx = todayEvents.indexOfFirst { it.time.isAfter(now) }.let { if (it < 0) todayEvents.size else it }
-        val start = if (todayEvents.size <= 4) 0 else minOf(nextIdx, todayEvents.size - 4)
-        val slots = todayEvents.drop(start).take(4)
-
-        // 실측은 한 번만 읽고 재사용(실패하면 오른쪽 칸 숨김)
-        val sea = try {
-            latestSea(ObsRepository.load(context, station).getOrNull())
-        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
-        }
+        // 첫 그리기용 초기값(동기 계산). 이후 관측소·새로고침 키가 바뀌면 content 안에서 다시 읽는다.
+        val initial = loadWidgetData(context, TideRepository.selectedStation(context))
 
         provideContent {
             val prefs = currentState<Preferences>()
+            val stationKey = prefs[WIDGET_STATION_KEY]
+            val refreshKey = prefs[WIDGET_REFRESH_KEY]
+            val firstRefreshKey = remember { refreshKey }
+            var data by remember { mutableStateOf(initial) }
+            LaunchedEffect(stationKey, refreshKey) {
+                if ((stationKey != null && stationKey != data.station.code) || refreshKey != firstRefreshKey) {
+                    val st = TideRepository.selectedStation(context)
+                    val fresh = withContext(Dispatchers.IO) { loadWidgetData(context, st) }
+                    data = fresh // 이름과 데이터를 한 번에 교체
+                }
+            }
+            val station = data.station
+            val today = data.today
+            val now = data.now
+            val todayEvents = data.todayEvents
+            val all = data.all
+            val m = mulddaeOf(today)
+            val yMin = data.yMin
+            val yMax = data.yMax
+            val next = all.firstOrNull { it.time.isAfter(now) }
+            val slots = data.slots
+            val sea = data.sea
             val size = LocalSize.current // Exact 모드: 위젯의 실제 크기
-            val showSea = sea != null && size.width >= WIDE_SIZE.width
+            val showSea = sea != null && size.width.value >= SEA_COL_MIN_WIDTH_DP
+            // 오른쪽 칸이 들어가면 왼쪽이 좁아지므로 글자·패딩을 조금 줄인다
+            val pillSp = if (showSea) 11.sp else 12.sp
+            val pillPad = if (showSea) 6.dp else 10.dp
+            val slotTimeSp = if (showSea) 13.sp else 15.sp
+            val slotSubSp = if (showSea) 9.sp else 10.sp
             val pal = WIDGET_PALETTES[(prefs[WIDGET_THEME_KEY] ?: fallbackTheme).coerceIn(0, THEME_COUNT - 1)]
             val white = ColorProvider(pal.fg)
             val sub = ColorProvider(pal.sub)
@@ -191,19 +246,20 @@ class TideWidget : GlanceAppWidget() {
                             GlanceModifier.fillMaxWidth()
                                 .background(faint)
                                 .cornerRadius(12.dp)
-                                .padding(horizontal = 10.dp, vertical = 3.dp),
+                                .padding(horizontal = pillPad, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 if (falling) "날물 ▼" else "들물 ▲",
-                                style = TextStyle(color = ColorProvider(tc), fontSize = 12.sp, fontWeight = FontWeight.Bold),
-                                modifier = GlanceModifier.defaultWeight()
+                                style = TextStyle(color = ColorProvider(tc), fontSize = pillSp, fontWeight = FontWeight.Bold),
+                                modifier = GlanceModifier.defaultWeight(),
+                                maxLines = if (showSea) 1 else Int.MAX_VALUE
                             )
                             Text(
-                                "${if (next.time.toLocalDate().isAfter(today)) "내일 " else ""}${if (next.high) "만조" else "간조"} %02d:%02d · %s".format(
+                                "${if (next.time.toLocalDate().isAfter(today)) "내일 " else ""}${if (showSea) "" else if (next.high) "만조 " else "간조 "}%02d:%02d · %s".format(
                                     next.time.hour, next.time.minute, remainText(now, next.time)
                                 ),
-                                style = TextStyle(color = white, fontSize = 12.sp),
+                                style = TextStyle(color = white, fontSize = pillSp),
                                 maxLines = 1
                             )
                         }
@@ -229,19 +285,19 @@ class TideWidget : GlanceAppWidget() {
                             Column(mod, horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     if (e.high) "▲ 만조" else "▼ 간조",
-                                    style = TextStyle(color = ColorProvider(c), fontSize = 10.sp, textAlign = TextAlign.Center)
+                                    style = TextStyle(color = ColorProvider(c), fontSize = slotSubSp, textAlign = TextAlign.Center)
                                 )
                                 Text(
                                     "%02d:%02d".format(e.time.hour, e.time.minute),
                                     style = TextStyle(
                                         color = ColorProvider(pal.fg.copy(alpha = a)),
-                                        fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+                                        fontSize = slotTimeSp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
                                     )
                                 )
                                 Text(
                                     "${e.heightCm}cm",
                                     style = TextStyle(
-                                        color = ColorProvider(pal.sub.copy(alpha = a)), fontSize = 10.sp,
+                                        color = ColorProvider(pal.sub.copy(alpha = a)), fontSize = slotSubSp,
                                         textAlign = TextAlign.Center
                                     )
                                 )
@@ -258,7 +314,7 @@ class TideWidget : GlanceAppWidget() {
                         Text(label, style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1)
                         Text(
                             value,
-                            style = TextStyle(color = ColorProvider(color), fontSize = 17.sp, fontWeight = FontWeight.Bold),
+                            style = TextStyle(color = ColorProvider(color), fontSize = 15.sp, fontWeight = FontWeight.Bold),
                             maxLines = 1
                         )
                     }
@@ -354,7 +410,7 @@ class RefreshCallback : ActionCallback {
             } catch (e: Exception) {
                 // 실패해도 캐시로 그린다
             }
-            TideWidget().updateAll(context)
+            refreshAllWidgets(context)
         } finally {
             running.set(false)
         }
@@ -384,6 +440,11 @@ class TideWidgetReceiver : GlanceAppWidgetReceiver() {
     }
 }
 
+/** 4x2 위젯 종류(같은 TideWidget을 쓰고 위젯 목록에서만 따로 보이게 한다). */
+class TideWidgetReceiver4x2 : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = TideWidget()
+}
+
 class WidgetRefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         // 1시간마다: 캐시로 다시 그린다("N분 후"·지금선 갱신). 캐시에 오늘이 없으면 load가 내려받는다.
@@ -396,7 +457,7 @@ class WidgetRefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWor
         } catch (e: Exception) {
         }
         val failed = r.isFailure
-        TideWidget().updateAll(applicationContext)
+        refreshAllWidgets(applicationContext)
         return if (failed) Result.retry() else Result.success()
     }
 }
