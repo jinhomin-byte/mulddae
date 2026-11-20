@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val TAB_NAMES = listOf("조위", "수온·기온", "바람", "염분")
+private val TAB_LABELS = mapOf("tide" to "조위", "current" to "조류", "obs" to "수온·기온", "wind" to "바람", "sal" to "염분")
 private val STAR_COLOR = Color(0xFFF9A825)
 
 /** 즐겨찾기 안내 문구. undo가 있으면 '되돌리기' 버튼이 붙는다(삭제 위치, 관측소). */
@@ -64,7 +64,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
     var yearData by remember(station.code) { mutableStateOf<Map<Int, List<TideEvent>>>(emptyMap()) }
     val noData = remember(station.code) { HashSet<Int>() } // 데이터 없음이 확인된 미래 연도(이번 실행 동안만)
     var forceNext by remember { mutableStateOf(false) }
-    var tab by remember { mutableIntStateOf(0) }
+    var tabKey by remember { mutableStateOf("tide") }
     var showPicker by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
@@ -96,6 +96,45 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
             obsLoading = false
         }
     }
+
+    // 조류: 짝 지점이 있는 관측소만 탭을 보인다(curHasPair == true). 오늘-1일~+6일 밖의 날짜는 다시 받지 않는다.
+    var curDay by remember(station.code) { mutableStateOf<CurrentRepository.Day?>(null) }
+    var curDayDate by remember(station.code) { mutableStateOf<LocalDate?>(null) }
+    var curLoading by remember(station.code) { mutableStateOf(false) }
+    // 짝 지점 유무: 캐시된 map.json으로 먼저 바로 판단(null=아직 모름). 짝이 있으면 로딩·실패 중에도 탭을 유지한다.
+    var curHasPair by remember(station.code) { mutableStateOf(CurrentRepository.cachedHasPair(ctx, station.code)) }
+    val curReq = remember { IntArray(1) } // 가장 최근에 시작한 불러오기 번호(이전 효과가 로딩 표시를 끄지 못하게)
+    var forceCur by remember { mutableStateOf(false) }
+    val curInRange = !obsDate.isBefore(LocalDate.now().minusDays(1)) && !obsDate.isAfter(LocalDate.now().plusDays(6))
+    LaunchedEffect(station.code, tick, obsDate) {
+        val force = forceCur
+        forceCur = false
+        if (!curInRange && curDay != null) return@LaunchedEffect
+        val q = if (curInRange) obsDate else LocalDate.now()
+        val myReq = ++curReq[0]
+        curLoading = true
+        try {
+            val pair = CurrentRepository.hasPair(ctx, station.code)
+            if (pair != null) curHasPair = pair
+            if (pair == false) {
+                curDay = null
+                curDayDate = null
+                return@LaunchedEffect
+            }
+            val r = CurrentRepository.dayFor(ctx, station.code, q, force)
+            val newDay = r ?: curDay?.let { CurrentRepository.Day(it.pointName, it.distanceKm, it.maxCrsp, null, null) }
+            curDay = newDay
+            curDayDate = q
+        } finally {
+            if (curReq[0] == myReq) curLoading = false
+        }
+    }
+    // 새 관측소에 조류가 없으면 조류 탭 선택을 조위로 정리한다(돌아왔을 때 선택 안 한 탭으로 점프 방지).
+    LaunchedEffect(curHasPair) {
+        if (curHasPair == false && tabKey == "current") tabKey = "tide"
+    }
+    val tabKeys = if (curHasPair == true) listOf("tide", "current", "obs", "wind", "sal") else listOf("tide", "obs", "wind", "sal")
+    val tab = if (tabKey in tabKeys) tabKey else "tide"
 
     var stationsFailed by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -322,6 +361,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                     .clickable(enabled = !loading) {
                         forceNext = true
                         forceObs = true
+                        forceCur = true
                         notice = null
                         error = null
                         tick++
@@ -392,15 +432,15 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
             TextButton(onClick = { viewTime = viewTime.plusDays(1) }) { Text("▶") }
         }
 
-        TabRow(selectedTabIndex = tab) {
-            TAB_NAMES.forEachIndexed { i, name ->
+        TabRow(selectedTabIndex = tabKeys.indexOf(tab)) {
+            tabKeys.forEach { key ->
                 // 수온이 없는 실측소는 '수온·기온' 탭 이름을 '기온'으로 바꾼다.
-                val label = if (i == 1 && obsInfo?.let { it.inIndex && !it.hasWtem } == true) "기온" else name
-                Tab(selected = tab == i, onClick = { tab = i }, selectedContentColor = ptextColor(), text = {
+                val label = if (key == "obs" && obsInfo?.let { it.inIndex && !it.hasWtem } == true) "기온" else TAB_LABELS.getValue(key)
+                Tab(selected = tab == key, onClick = { tabKey = key }, modifier = Modifier.height(40.dp), selectedContentColor = ptextColor(), text = {
                     Text(
                         label, maxLines = 1, softWrap = false, fontSize = 11.sp, lineHeight = 16.sp,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
-                        modifier = Modifier.wrapContentWidth(unbounded = true).padding(vertical = 10.dp)
+                        modifier = Modifier.wrapContentWidth(unbounded = true)
                     )
                 })
             }
@@ -419,11 +459,16 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-        if (tab != 0 && viewDate.isAfter(LocalDate.now())) {
+        if (tab == "current") {
+            CurrentTabContent(
+                day = curDay, dayDate = curDayDate, viewDate = viewDate, loading = curLoading,
+                themeIndex = themeIndex, events = allEvents, yMin = yMin, yMax = yMax
+            )
+        } else if (tab != "tide" && viewDate.isAfter(LocalDate.now())) {
             ObsMessage("미래의 정보는 제공하지 않습니다.")
-        } else if (tab == 1 || tab == 3) {
-            ObsTabContent(obsInfo, obsLoading, obsError, salinity = tab == 3, isToday = viewDate == LocalDate.now())
-        } else if (tab == 2) {
+        } else if (tab == "obs" || tab == "sal") {
+            ObsTabContent(obsInfo, obsLoading, obsError, salinity = tab == "sal", isToday = viewDate == LocalDate.now())
+        } else if (tab == "wind") {
             WindTabContent(obsInfo, obsLoading, obsError, isToday = viewDate == LocalDate.now())
         } else {
             val now = tideHeightAt(allEvents, viewTime)
@@ -478,8 +523,10 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
         }
         }
 
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            val sourceText = if (tab == 0) TideRepository.SOURCE_TEXT else ObsRepository.SOURCE_TEXT
+        if (tab == "current") {
+            CurrentFooter(curDay)
+        } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val sourceText = if (tab == "tide") TideRepository.SOURCE_TEXT else ObsRepository.SOURCE_TEXT
             var sourceSize by remember(sourceText) { mutableStateOf(9f) }
             Text(
                 sourceText,
