@@ -10,7 +10,7 @@ on:
         required: false
         default: 'false'
       max_calls:
-        description: '호출 예산(정기 실행은 1500, 수동 실행 기본 5000)'
+        description: '호출 예산(정기·수동 실행 모두 기본 5000)'
         required: false
         default: '5000'
 
@@ -39,7 +39,7 @@ jobs:
         env:
           TIDE_API_KEY: ${{ secrets.TIDE_API_KEY }}
           BACKFILL: ${{ github.event.inputs.backfill == 'true' && '1' || '' }}
-          MAX_CALLS: ${{ github.event.inputs.max_calls }}
+          MAX_CALLS: ${{ github.event.inputs.max_calls || '5000' }}
         run: node tools/fetch_current.mjs
 
       - name: 데이터 형식 검증

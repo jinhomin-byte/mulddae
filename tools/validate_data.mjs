@@ -305,7 +305,8 @@ if (fs.existsSync(OBS_DIR) && !SKIP_OBS) {
 // ---------- data/current (조류) ----------
 const CUR_DIR = path.join(DATA_DIR, 'current');
 const CUR_SLOTS = 144;
-const CUR_MAX_CRSP = 500; // cm/s
+// 명량수도(울돌목)는 유속이 약 5.2 m/s(520 cm/s 이상)로 정상 값이므로 상한을 1000 cm/s 로 둔다.
+const CUR_MAX_CRSP = 1000; // cm/s
 if (fs.existsSync(CUR_DIR) && (ONLY_CURRENT || !process.argv[2] || process.argv[2] === 'all')) {
   const mapRel = 'data/current/map.json';
   const mapPath = path.join(CUR_DIR, 'map.json');

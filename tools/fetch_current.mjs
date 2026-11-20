@@ -1,6 +1,6 @@
 // 조류예보(시계열) 수집 스크립트. Node 18+, 외부 의존성 없음.
 // 사용: node tools/fetch_current.mjs   (먼저 node tools/build_current_map.mjs 로 data/current/map.json 생성)
-// env: TIDE_API_KEY, MAX_CALLS(기본 1500), BACKFILL(1이면 30일 백필), ONLY_POINTS(쉼표 구분 조류지점 코드), DAYS_BACK_FILL(백필 일수, 기본 30)
+// env: TIDE_API_KEY, MAX_CALLS(기본 1500, 워크플로는 5000 지정), BACKFILL(1이면 30일 백필), ONLY_POINTS(쉼표 구분 조류지점 코드), DAYS_BACK_FILL(백필 일수, 기본 30)
 // 저장: data/current/<조류지점코드>.json = {source,name,lat,lot,min:10,start,days:{날짜:{s:[144],d:[144]}},maxCrsp}
 // 저장 기간: 어제부터 오늘+6일(총 8일). maxCrsp = 수집 시작 시 최근 30일과 이후 예보에서 본 최대 유속(줄어들지 않음).
 import fs from 'node:fs';
