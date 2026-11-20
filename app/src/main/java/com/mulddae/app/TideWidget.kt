@@ -88,7 +88,7 @@ private const val SEA_COL_MIN_WIDTH_DP = 270f // 이 폭 이상이면 오른쪽�
 private const val SEA_COL_WIDTH_DP = 80 // 오른쪽 바다 정보 칸 폭
 private const val SEA_COL_GAP_DP = 8 // 곡선 영역과 오른쪽 칸 사이 간격
 private const val CURRENT_BAR_DP = 20f // 조류 막대 줄 높이
-private const val SEA_CUR_ALIGN_GAP_DP = 13 // 5칸 오른쪽 칸: "남서·약함"과 "관측" 사이 간격(값 줄을 막대 줄 중심에 맞추는 보정값)
+private const val SEA_CUR_ALIGN_GAP_DP = 8 // 5칸 오른쪽 칸: "남서·약함"과 "관측" 사이 간격(값 줄 글자 바닥을 막대 줄 바닥선에 맞추는 보정값)
 // 5칸 오른쪽 칸 줄 높이 추정(폰 글꼴 여유 포함, 단계적 생략 계산용)
 private const val SEA_ITEM_DP = 32f // 수온·기온·풍속 한 항목(라벨+값)
 private const val SEA_CUR_LABEL_DP = 14f
@@ -341,10 +341,10 @@ class TideWidget : GlanceAppWidget() {
                             val isNext = next != null && e.time == next.time
                             val a = if (past) 0.5f else 1f
                             val c = (if (e.high) pal.accent else pal.down).copy(alpha = a)
-                            val mod = GlanceModifier.defaultWeight().padding(vertical = slotPadV).let {
-                                if (isNext) it.background(faint).cornerRadius(8.dp)
-                                else it
-                            }
+                            // 배경은 항상 지정(강조 아닌 칸은 투명): 빼면 Glance가 이전 배경을 안 지움
+                            val slotBg = if (isNext) faint else ColorProvider(pal.fg.copy(alpha = 0f))
+                            val mod = GlanceModifier.defaultWeight().padding(vertical = slotPadV)
+                                .background(slotBg).cornerRadius(8.dp)
                             Column(mod, horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     if (e.high) "▲ 만조" else "▼ 간조",
