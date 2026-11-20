@@ -374,14 +374,19 @@ fun CurrentTabContent(
 fun CurrentFooter(day: CurrentRepository.Day?) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (day != null) {
-            Text(
-                buildAnnotatedString {
-                    append("조류 지점: ")
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(day.pointName) }
-                    append(" · 관측소에서 ${"%.1f".format(Locale.US, day.distanceKm)}km")
-                },
-                fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(Modifier.fillMaxWidth()) {
+                Text("조류 지점: ", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        day.pointName, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "관측소에서 ${"%.1f".format(Locale.US, day.distanceKm)}km",
+                        fontSize = 12.sp, color = subColor()
+                    )
+                }
+            }
         }
         var sourceSize by remember { mutableStateOf(9f) }
         Text(
