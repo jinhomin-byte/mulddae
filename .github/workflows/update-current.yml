@@ -1,0 +1,74 @@
+name: 조류 데이터 갱신
+
+on:
+  schedule:
+    - cron: '10 19 * * *'  # 매일 KST 04:10
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: '30일 백필(최대 유속 기준값 재계산)을 할지 (true/false). 첫 실행은 backfill=true, max_calls=5000 권장'
+        required: false
+        default: 'false'
+      max_calls:
+        description: '호출 예산(정기 실행은 1500, 수동 실행 기본 5000)'
+        required: false
+        default: '5000'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-current
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 조위관측소-조류지점 매핑 생성
+        run: node tools/build_current_map.mjs
+
+      - name: 조류 데이터 수집
+        env:
+          TIDE_API_KEY: ${{ secrets.TIDE_API_KEY }}
+          BACKFILL: ${{ github.event.inputs.backfill == 'true' && '1' || '' }}
+          MAX_CALLS: ${{ github.event.inputs.max_calls }}
+        run: node tools/fetch_current.mjs
+
+      - name: 데이터 형식 검증
+        run: node tools/validate_data.mjs current
+
+      - name: 변경 사항 커밋
+        run: |
+          if [ -z "$(git status --porcelain data/current/)" ]; then
+            echo "변경 없음"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/current/
+          git commit -m "조류 데이터 갱신 $(TZ=Asia/Seoul date '+%Y-%m-%d')"
+          # 조석·실측 수집 워크플로와 동시에 push 할 수 있으므로 rebase 후 push, 실패 시 재시도
+          for i in 1 2 3 4 5; do
+            if git ls-remote --exit-code --heads origin "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
+              if ! git pull --rebase origin "${GITHUB_REF_NAME}"; then
+                echo "rebase 충돌: 중단하고 실패 처리"
+                git rebase --abort || true
+                exit 1
+              fi
+            fi
+            if git push; then
+              exit 0
+            fi
+            echo "push 실패, 재시도 ($i/5)"
+            sleep $((i * 5))
+          done
+          echo "push 5회 실패"
+          exit 1

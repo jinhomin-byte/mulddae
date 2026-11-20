@@ -26,7 +26,10 @@ function warn(msg) {
   if (msg && warnShown.length < MAX_SHOW) warnShown.push(msg);
 }
 // 'obs' 인자: 실측 데이터(data/obs)만 검사. 인자 없으면 전체.
-const ONLY_OBS = process.argv[2] === 'obs';
+// 'current' 인자: 조류 데이터(data/current)만 검사.
+const ONLY_CURRENT = process.argv[2] === 'current';
+const ONLY_OBS = process.argv[2] === 'obs' || ONLY_CURRENT;
+const SKIP_OBS = ONLY_CURRENT;
 
 const isStr = (v) => typeof v === 'string' && v.trim() !== '';
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -140,7 +143,7 @@ if (ONLY_OBS) {
 // ---------- 관측소별 연도 파일 ----------
 const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
 for (const code of fs.readdirSync(DATA_DIR).sort()) {
-  if (code === 'obs' || ONLY_OBS) continue; // 실측 데이터는 아래에서 따로 검사
+  if (code === 'obs' || code === 'current' || ONLY_OBS) continue; // 실측·조류 데이터는 아래에서 따로 검사
   const dir = path.join(DATA_DIR, code);
   if (!fs.statSync(dir).isDirectory()) continue;
   for (const fname of fs.readdirSync(dir).sort()) {
@@ -211,7 +214,7 @@ const obsOldest = dayStr(-(OBS_KEEP_DAYS + OBS_GRACE_DAYS));
 const obsNewest = dayStr(1);
 const obsTimeRe = /^([01]\d|2[0-3]):00$/;
 
-if (fs.existsSync(OBS_DIR)) {
+if (fs.existsSync(OBS_DIR) && !SKIP_OBS) {
   const f = 'data/obs/index.json';
   const obsIdxPath = path.join(OBS_DIR, 'index.json');
   if (!fs.existsSync(obsIdxPath)) {
@@ -297,6 +300,99 @@ if (fs.existsSync(OBS_DIR)) {
       }
     }
   }
+}
+
+// ---------- data/current (조류) ----------
+const CUR_DIR = path.join(DATA_DIR, 'current');
+const CUR_SLOTS = 144;
+const CUR_MAX_CRSP = 500; // cm/s
+if (fs.existsSync(CUR_DIR) && (ONLY_CURRENT || !process.argv[2] || process.argv[2] === 'all')) {
+  const mapRel = 'data/current/map.json';
+  const mapPath = path.join(CUR_DIR, 'map.json');
+  const pointCodes = [];
+  if (!fs.existsSync(mapPath)) {
+    err(mapRel, '파일 없음');
+  } else {
+    fileCount++;
+    const mp = readJson(mapPath, mapRel);
+    if (mp !== undefined) {
+      if (!isObj(mp)) {
+        err(mapRel, '최상위가 객체가 아님');
+      } else {
+        if (!isStr(mp.updated) || Number.isNaN(Date.parse(mp.updated))) err(mapRel, 'updated 가 ISO8601 형식이 아님');
+        if (!isStr(mp.rule)) err(mapRel, 'rule 없음');
+        if (!isObj(mp.stations)) err(mapRel, 'stations 객체 없음');
+        if (!isObj(mp.points)) {
+          err(mapRel, 'points 객체 없음');
+        } else {
+          for (const [pc, p] of Object.entries(mp.points)) {
+            pointCodes.push(pc);
+            if (!isObj(p) || !isStr(p.name) || !isNum(p.lat) || !isNum(p.lot)) err(mapRel, `points.${pc}: name/lat/lot 형식 오류`);
+          }
+        }
+        if (isObj(mp.stations) && isObj(mp.points)) {
+          for (const [sc, s] of Object.entries(mp.stations)) {
+            if (!isObj(s) || !isStr(s.point) || !isNum(s.km)) err(mapRel, `stations.${sc}: point/km 형식 오류`);
+            else if (!(s.point in mp.points)) err(mapRel, `stations.${sc}: points 에 없는 지점 ${s.point}`);
+          }
+        }
+      }
+    }
+  }
+
+  for (const fname of fs.readdirSync(CUR_DIR).sort()) {
+    if (fname === 'map.json') continue;
+    const rel = `data/current/${fname}`;
+    if (!/\.json$/.test(fname)) {
+      err(rel, '.json 파일이 아님');
+      continue;
+    }
+    const code = fname.slice(0, -5);
+    fileCount++;
+    const obj = readJson(path.join(CUR_DIR, fname), rel);
+    if (obj === undefined) continue;
+    if (!isObj(obj)) {
+      err(rel, '최상위가 객체가 아님');
+      continue;
+    }
+    if (!isStr(obj.source)) err(rel, 'source 문구 없음');
+    if (!isStr(obj.name)) err(rel, 'name 없음');
+    if (!isNum(obj.lat) || !isNum(obj.lot)) err(rel, 'lat/lot 형식 오류');
+    if (obj.min !== 10) err(rel, `min 이 10 이 아님(${obj.min})`);
+    if (!isNum(obj.maxCrsp) || obj.maxCrsp < 0 || obj.maxCrsp > CUR_MAX_CRSP) err(rel, `maxCrsp 형식/범위 오류(${obj.maxCrsp})`);
+    if (!isObj(obj.days)) {
+      err(rel, 'days 객체 없음');
+      continue;
+    }
+    const dates = Object.keys(obj.days).sort();
+    if (dates.length === 0) err(rel, 'days 가 비어 있음');
+    else if (obj.start !== dates[0]) err(rel, `start(${obj.start})가 가장 이른 날짜(${dates[0]})와 다름`);
+    for (const date of dates) {
+      dayCount++;
+      if (!validDate(date)) {
+        err(rel, `날짜 키 형식 오류: ${date}`);
+        continue;
+      }
+      const day = obj.days[date];
+      if (!isObj(day) || !Array.isArray(day.s) || !Array.isArray(day.d)) {
+        err(rel, `${date}: s/d 배열 없음`);
+        continue;
+      }
+      if (day.s.length !== CUR_SLOTS || day.d.length !== CUR_SLOTS) {
+        err(rel, `${date}: s/d 길이가 ${CUR_SLOTS}가 아님(${day.s.length}/${day.d.length})`);
+        continue;
+      }
+      if (!day.s.every((v) => isNum(v) && v >= 0 && v <= CUR_MAX_CRSP)) err(rel, `${date}: 유속 s 값이 숫자 0~${CUR_MAX_CRSP} 범위가 아님`);
+      if (!day.d.every((v) => Number.isInteger(v) && v >= -1 && v <= 15)) err(rel, `${date}: 유향 d 값이 정수 -1~15 범위가 아님`);
+    }
+    if (pointCodes.length > 0 && !pointCodes.includes(code)) warn(`map.json 의 points 에 없는 지점 파일(수집 시 정리됨): ${fname}`);
+  }
+
+  // map.json 의 points 가 모두 파일로 존재해야 함
+  // 일부 지점만 실패·시험 수집한 경우를 허용하려고 일부 누락은 경고, 하나도 없으면 오류
+  const missing = pointCodes.filter((pc) => !fs.existsSync(path.join(CUR_DIR, `${pc}.json`)));
+  if (pointCodes.length > 0 && missing.length === pointCodes.length) err(mapRel, 'points 지점 파일이 하나도 없음');
+  else for (const pc of missing) warn(`조류 지점 파일 없음: ${pc}.json`);
 }
 
 finish();

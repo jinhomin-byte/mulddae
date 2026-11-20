@@ -24,6 +24,9 @@
 ## 실측 데이터 (수온 등)
 조위관측소 실측값(수온, 기온, 풍속, 최대순간풍속, 풍향, 염분)을 GitHub Actions로 매시 정각에 수집해 `data/obs/`에 저장한다(`tools/fetch_obs.mjs`, `tools/obs_stations.csv` 66곳, `.github/workflows/update-obs.yml`). `data/obs/<관측소코드>/<YYYY-MM>.json`은 `{"obs":{"날짜":{"HH:00":[값...]}}}` 형태의 정시 값이고 값 순서는 `data/obs/index.json`의 `fields`를 따른다(값이 없으면 null). `data/obs/index.json`의 각 관측소 항목에는 마지막 관측 시각 `lastTime`과, 수온이 null이 아닌 마지막 관측 시각 `wtemLast`("yyyy-MM-dd HH:mm", 없으면 null)가 있다. 항상 최근 365일만 보관하고 그보다 오래된 데이터는 지운다. 출처: 해양수산부 국립해양조사원, 조위관측소 최신 관측데이터 (공공데이터포털). 공공누리 제1유형(출처표시)에 따라 이용한다.
 
+## 조류 데이터
+조류예보(시계열)를 매일 KST 04시대에 GitHub Actions로 수집해 `data/current/`에 저장한다(`tools/current_points.json` 예보지점: 코드표 204곳 중 위경도 확인 202곳 사용, `tools/build_current_map.mjs`, `tools/fetch_current.mjs`, `.github/workflows/update-current.yml`). `data/current/map.json`은 조위관측소와 가장 가까운 조류 지점의 짝(수온 있는 관측소 20km, 없으면 10km 이내)이고, `data/current/<지점코드>.json`은 어제부터 오늘+6일(총 8일)까지 10분 간격 유속(`s`, cm/s)과 유향(`d`, 0=북 시계방향 16방위 인덱스, 모르면 -1) 각 144개와 수집 시작 시 최근 30일과 이후 예보에서 본 최대 유속 `maxCrsp`(줄어들지 않음)를 담는다. 출처: 해양수산부 국립해양조사원, 조류예보(시계열) (공공데이터포털). 공공누리 제1유형(출처표시)에 따라 이용한다.
+
 ## 정적 URL
 - `https://raw.githubusercontent.com/<USER>/<REPO>/main/data/index.json`
 - `https://raw.githubusercontent.com/<USER>/<REPO>/main/data/<관측소코드>/<연도>.json`
