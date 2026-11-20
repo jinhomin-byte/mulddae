@@ -229,7 +229,7 @@ class TideWidget : GlanceAppWidget() {
                             .clickable(actionRunCallback<RefreshCallback>()),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("↻", style = TextStyle(color = white, fontSize = 15.sp, fontWeight = FontWeight.Bold))
+                        Text("↻", style = TextStyle(color = white, fontSize = 19.sp, fontWeight = FontWeight.Bold))
                     }
                 }
 
