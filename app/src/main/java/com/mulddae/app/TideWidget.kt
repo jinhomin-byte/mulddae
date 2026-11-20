@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.glance.layout.fillMaxHeight
 import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
@@ -229,7 +230,12 @@ class TideWidget : GlanceAppWidget() {
                             .clickable(actionRunCallback<RefreshCallback>()),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("↻", style = TextStyle(color = white, fontSize = 19.sp, fontWeight = FontWeight.Bold))
+                        Image(
+                            provider = ImageProvider(R.drawable.ic_widget_refresh),
+                            contentDescription = "새로고침",
+                            colorFilter = ColorFilter.tint(white),
+                            modifier = GlanceModifier.size(20.dp)
+                        )
                     }
                 }
 
