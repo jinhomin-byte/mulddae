@@ -144,6 +144,18 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
     LaunchedEffect(tick) {
         ObsRepository.loadWtemCodes(ctx).onSuccess { wtemCodes = it }
     }
+    // 조류 짝이 있는 관측소 코드(map.json). 시작 시 캐시로 바로, 이어서 한 번 불러 메모리에 들고 있는다.
+    var pairCodes by remember { mutableStateOf(CurrentRepository.cachedPairCodes(ctx)) }
+    LaunchedEffect(tick) {
+        CurrentRepository.loadPairCodes(ctx)?.let { pairCodes = it }
+    }
+    // 목록 정렬: 둘 다 -> 조류만 -> 수온만 -> 없음, 묶음 안은 가나다순
+    val groupedStations = remember(stations, wtemCodes, pairCodes) {
+        val collator = java.text.Collator.getInstance(java.util.Locale.KOREAN)
+        stations.groupBy { stationKind(it.code in wtemCodes, it.code in pairCodes) }
+            .toSortedMap()
+            .mapValues { (_, v) -> v.sortedWith { a, b -> collator.compare(a.name, b.name) } }
+    }
 
     // 즐겨찾기(최대 5개). favNote: 안내 문구(+되돌리기용 삭제 항목), 몇 초 뒤 사라진다.
     var favs by remember { mutableStateOf(Favorites.load(ctx)) }
@@ -288,7 +300,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                     contentPadding = PaddingValues(horizontal = 8.dp),
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "관측소 선택, ${station.name}" }
                 ) {
-                    ThermoMark(station.code in wtemCodes)
+                    StationIcon(stationKind(station.code in wtemCodes, station.code in pairCodes), 18.dp, emptySize = 20.dp)
                     var nameSize by remember(station.name) { mutableStateOf(14f) }
                     Text(
                         station.name, maxLines = 1, softWrap = false,
@@ -304,11 +316,19 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                     Text(" ▾", maxLines = 1, softWrap = false)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    stations.forEach { s ->
+                    groupedStations.forEach { (kind, list) ->
+                      Text(
+                          "${kind.title} (${list.size}곳)", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                          color = subColor(),
+                          modifier = Modifier.fillMaxWidth()
+                              .background(subColor().copy(alpha = 0.12f))
+                              .padding(horizontal = 12.dp, vertical = 4.dp)
+                      )
+                      list.forEach { s ->
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    ThermoMark(s.code in wtemCodes)
+                                    StationIcon(kind, 20.dp)
                                     Spacer(Modifier.width(6.dp))
                                     Text(s.name)
                                 }
@@ -327,6 +347,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                                 menu = false
                                 selectStation(s)
                             })
+                      }
                     }
                 }
             }
@@ -378,7 +399,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
 
         if (favs.isNotEmpty()) {
             FavoriteChips(
-                favs = favs, selectedCode = station.code, wtemCodes = wtemCodes, editCode = editCode,
+                favs = favs, selectedCode = station.code, wtemCodes = wtemCodes, pairCodes = pairCodes, editCode = editCode,
                 onSelect = { f ->
                     // 목록을 받은 뒤에는 반드시 목록 안의 Station을 쓴다.
                     val target = if (stationsReady) stations.firstOrNull { it.code == f.code } else f

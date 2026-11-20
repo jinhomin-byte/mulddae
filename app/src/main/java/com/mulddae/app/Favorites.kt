@@ -49,35 +49,6 @@ object Favorites {
     }
 }
 
-private val THERMO_RED = Color(0xFFD32F2F)
-private val THERMO_TUBE = PathParser().parsePathString("M10 4a2 2 0 0 1 4 0v9.47A4.5 4.5 0 1 1 10 13.47Z").toPath()
-
-/** 빨간 온도계 마크(규격: 24x24 기준, 20dp). show=false면 같은 크기의 빈 자리. */
-@Composable
-fun ThermoMark(show: Boolean, markSize: Dp = 20.dp) {
-    if (!show) {
-        Spacer(Modifier.size(markSize))
-        return
-    }
-    Canvas(Modifier.size(markSize)) {
-        scale(size.width / 24f, pivot = Offset.Zero) {
-            drawPath(THERMO_TUBE, Color.White)
-            drawPath(
-                THERMO_TUBE, THERMO_RED,
-                style = Stroke(width = 1.7f, join = StrokeJoin.Round)
-            )
-            drawRoundRect(
-                THERMO_RED, topLeft = Offset(11.1f, 8f), size = Size(1.8f, 9f),
-                cornerRadius = CornerRadius(0.9f, 0.9f)
-            )
-            drawCircle(THERMO_RED, radius = 2.6f, center = Offset(12f, 17.5f))
-            drawLine(THERMO_RED, Offset(16.2f, 5.2f), Offset(18.8f, 5.2f), 1.3f, StrokeCap.Round)
-            drawLine(THERMO_RED, Offset(16.2f, 8.2f), Offset(18.0f, 8.2f), 1.3f, StrokeCap.Round)
-            drawLine(THERMO_RED, Offset(16.2f, 11.2f), Offset(18.8f, 11.2f), 1.3f, StrokeCap.Round)
-        }
-    }
-}
-
 /** 이름 3자까지, 4자 이상은 3자+".." */
 fun chipLabel(name: String): String = if (name.length > 3) name.take(3) + ".." else name
 
@@ -88,6 +59,7 @@ fun FavoriteChips(
     favs: List<Station>,
     selectedCode: String,
     wtemCodes: Set<String>,
+    pairCodes: Set<String>,
     editCode: String?,
     onSelect: (Station) -> Unit,
     onLongPress: (Station) -> Unit,
@@ -100,7 +72,7 @@ fun FavoriteChips(
     ) {
         favs.forEach { s ->
             val selected = s.code == selectedCode
-            val hasTemp = s.code in wtemCodes
+            val kind = stationKind(s.code in wtemCodes, s.code in pairCodes)
             Box(Modifier.weight(1f).padding(top = 8.dp)) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -119,8 +91,8 @@ fun FavoriteChips(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        if (hasTemp) {
-                            ThermoMark(true, 14.dp)
+                        if (kind != StationKind.NONE) {
+                            StationIcon(kind, 16.dp)
                             Spacer(Modifier.width(1.dp))
                         }
                         Text(

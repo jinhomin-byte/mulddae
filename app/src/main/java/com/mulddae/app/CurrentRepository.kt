@@ -71,6 +71,28 @@ object CurrentRepository {
         pairIn(JSONObject(f.readText()), stationCode)
     }.getOrNull()
 
+    private fun pairCodesIn(map: JSONObject): Set<String> {
+        val st = map.optJSONObject("stations") ?: return emptySet()
+        return st.keys().asSequence().filter { pairIn(map, it) }.toSet()
+    }
+
+    /** 캐시된 map.json에서 짝 지점이 있는 관측소 코드들(네트워크 없음). 캐시가 없거나 깨졌으면 빈 집합. */
+    fun cachedPairCodes(c: Context): Set<String> = runCatching {
+        val f = java.io.File(java.io.File(c.filesDir, "tide"), "current_map.json")
+        pairCodesIn(JSONObject(f.readText()))
+    }.getOrDefault(emptySet())
+
+    /** map.json(캐시 우선)에서 짝 지점이 있는 관측소 코드들. 받을 수도 없으면 null. */
+    suspend fun loadPairCodes(c: Context): Set<String>? = withContext(Dispatchers.IO) {
+        try {
+            pairCodesIn(JSONObject(TideRepository.fetchCached(c, "current/map.json", "current_map.json", MAX_AGE_MS)))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** map.json(캐시 우선)로 짝 지점 유무 판단. 받을 수도 없으면 null(알 수 없음). */
     suspend fun hasPair(c: Context, stationCode: String): Boolean? = withContext(Dispatchers.IO) {
         try {
