@@ -88,6 +88,7 @@ private const val SEA_COL_MIN_WIDTH_DP = 270f // 이 폭 이상이면 오른쪽�
 private const val SEA_COL_WIDTH_DP = 80 // 오른쪽 바다 정보 칸 폭
 private const val SEA_COL_GAP_DP = 8 // 곡선 영역과 오른쪽 칸 사이 간격
 private const val CURRENT_BAR_DP = 20f // 조류 막대 줄 높이
+private const val SEA_CUR_ALIGN_GAP_DP = 13 // 5칸 오른쪽 칸: "남서·약함"과 "관측" 사이 간격(값 줄을 막대 줄 중심에 맞추는 보정값)
 private const val CURVE_OVERHEAD_WITH_CURRENT_DP = 129f // 5칸+조류: 막대 20dp 포함, 작아진 만·간조 줄 기준(스크린샷의 빈 띠 18dp 보정)
 private const val CURVE_OVERHEAD_DP = 125f// 곡선 외 고정 높이(윗줄·알약·4칸·패딩, 에뮬레이터 측정값)
 
@@ -375,28 +376,30 @@ class TideWidget : GlanceAppWidget() {
                         if (sea.wtem != null) item("수온", "%.1f°C".format(Locale.US, sea.wtem), pal.accent)
                         if (sea.artmp != null) item("기온", "%.1f°C".format(Locale.US, sea.artmp), pal.down)
                         if (sea.wspd != null) item("풍속", "%.1f m/s".format(Locale.US, sea.wspd), pal.fg)
-                        if (cur != null) {
-                            Text("조류", style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "${cur.speedMsText} m/s",
-                                    style = TextStyle(color = ColorProvider(pal.down), fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                                    maxLines = 1
-                                )
-                                if (arrowBitmap != null) {
-                                    Spacer(GlanceModifier.width(2.dp))
-                                    Image(
-                                        provider = ImageProvider(arrowBitmap),
-                                        contentDescription = "조류 방향",
-                                        modifier = GlanceModifier.size(14.dp)
-                                    )
-                                }
-                            }
+                    }
+                    if (cur != null) {
+                        // 조류 블록: 바닥 기준으로 쌓아 값 줄이 왼쪽 조류 막대 줄과 같은 높이에 오게 한다
+                        Text("조류", style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "${cur.dirName} · ${cur.strength}",
-                                style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1
+                                "${cur.speedMsText} m/s",
+                                style = TextStyle(color = ColorProvider(pal.down), fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                maxLines = 1
                             )
+                            if (arrowBitmap != null) {
+                                Spacer(GlanceModifier.width(2.dp))
+                                Image(
+                                    provider = ImageProvider(arrowBitmap),
+                                    contentDescription = "조류 방향",
+                                    modifier = GlanceModifier.size(14.dp)
+                                )
+                            }
                         }
+                        Text(
+                            "${cur.dirName} · ${cur.strength}",
+                            style = TextStyle(color = sub, fontSize = 10.sp), maxLines = 1
+                        )
+                        Spacer(GlanceModifier.height(SEA_CUR_ALIGN_GAP_DP.dp))
                     }
                     Text(
                         "관측 %02d:%02d".format(sea.time.hour, sea.time.minute),
