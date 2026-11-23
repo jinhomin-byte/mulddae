@@ -8,6 +8,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.semantics.contentDescription
@@ -58,6 +61,38 @@ class MainActivity : ComponentActivity() {
 
 private val TAB_LABELS = mapOf("tide" to "조위", "current" to "조류", "obs" to "수온·기온", "wind" to "바람", "sal" to "염분")
 private val STAR_COLOR = Color(0xFFF9A825)
+private val HIGHLIGHT_COLOR = Color(0xFFF57C00)
+
+private const val CHOSEONG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
+
+/** 한글 음절은 초성 자모로, 그 외 글자는 그대로 바꾼다. */
+private fun toChoseong(s: String) = s.map { if (it in '가'..'힣') CHOSEONG[(it - '가') / 588] else it }.joinToString("")
+
+/** 검색어(공백 제거됨)가 전부 초성 자모인가. */
+private fun isChoseongQuery(q: String) = q.isNotEmpty() && q.all { it in CHOSEONG }
+
+/** 일반 부분 일치 또는(초성 검색어일 때) 초성 부분 일치. */
+private fun nameMatches(name: String, q: String): Boolean {
+    val n = name.filterNot { it.isWhitespace() }
+    return n.contains(q, ignoreCase = true) || (isChoseongQuery(q) && toChoseong(n).contains(q))
+}
+
+/** 이름에서 검색어(공백 무시)와 일치하는 부분을 주황색으로 강조한다. */
+private fun highlightName(name: String, q: String) = buildAnnotatedString {
+    val idx = name.indices.filter { !name[it].isWhitespace() }
+    val stripped = idx.map { name[it] }.joinToString("")
+    var at = if (q.isEmpty()) -1 else stripped.indexOf(q, ignoreCase = true)
+    if (at < 0 && isChoseongQuery(q)) at = toChoseong(stripped).indexOf(q)
+    if (at < 0) {
+        append(name)
+    } else {
+        val s = idx[at]
+        val e = idx[at + q.length - 1] + 1
+        append(name.substring(0, s))
+        withStyle(SpanStyle(color = HIGHLIGHT_COLOR, fontWeight = FontWeight.Bold)) { append(name.substring(s, e)) }
+        append(name.substring(e))
+    }
+}
 
 /** 즐겨찾기 안내 문구. undo가 있으면 '되돌리기' 버튼이 붙는다(삭제 위치, 관측소). */
 private class FavNote(val text: String, val undo: Pair<Int, Station>?)
@@ -348,8 +383,62 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                     )
                     Text(" ▾", maxLines = 1, softWrap = false)
                 }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    groupedStations.forEach { (kind, list) ->
+                var query by remember { mutableStateOf("") }
+                val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+                LaunchedEffect(menu) {
+                    if (menu) {
+                        kotlinx.coroutines.delay(100)
+                        runCatching { searchFocus.requestFocus() }
+                    } else query = ""
+                }
+                val q = query.filterNot { it.isWhitespace() }
+                val shownStations = remember(groupedStations, q) {
+                    if (q.isEmpty()) groupedStations
+                    else groupedStations.mapValues { (_, v) ->
+                        v.filter { nameMatches(it.name, q) }
+                    }.filterValues { it.isNotEmpty() }
+                }
+                DropdownMenu(
+                    expanded = menu, onDismissRequest = { menu = false },
+                    modifier = Modifier.imePadding()
+                ) {
+                    // 맨 위 고정 검색칸
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                            .background(subColor().copy(alpha = 0.12f))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Search, contentDescription = null, tint = subColor(), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Box(Modifier.weight(1f)) {
+                            if (query.isEmpty()) Text("관측소 이름 검색", fontSize = 14.sp, color = subColor())
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = query, onValueChange = { query = it },
+                                singleLine = true,
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = ptextColor()),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(ptextColor()),
+                                modifier = Modifier.fillMaxWidth().focusRequester(searchFocus)
+                            )
+                        }
+                        if (query.isNotEmpty()) {
+                            Icon(
+                                Icons.Filled.Clear, contentDescription = "검색어 지우기", tint = subColor(),
+                                modifier = Modifier.size(18.dp).clickable { query = "" }
+                            )
+                        }
+                    }
+                    // 목록만 스크롤
+                    Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    if (shownStations.isEmpty()) {
+                        Text(
+                            "\"$query\"이 들어간 관측소가 없습니다. 다른 글자로 찾아보세요.",
+                            fontSize = 13.sp, color = subColor(),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp).widthIn(max = 240.dp)
+                        )
+                    }
+                    shownStations.forEach { (kind, list) ->
                       Text(
                           "${kind.title} (${list.size}곳)", fontSize = 12.sp, fontWeight = FontWeight.Bold,
                           color = subColor(),
@@ -363,7 +452,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     StationIcon(kind, 20.dp)
                                     Spacer(Modifier.width(6.dp))
-                                    Text(s.name)
+                                    Text(highlightName(s.name, q))
                                 }
                             },
                             trailingIcon = {
@@ -381,6 +470,7 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
                                 selectStation(s)
                             })
                       }
+                    }
                     }
                 }
             }
