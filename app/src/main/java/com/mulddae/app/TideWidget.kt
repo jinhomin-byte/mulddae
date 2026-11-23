@@ -230,16 +230,19 @@ class TideWidget : GlanceAppWidget() {
                 // 윗줄
                 Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Row(GlanceModifier.defaultWeight(), verticalAlignment = Alignment.CenterVertically) {
+                        // 이름만 남는 폭을 차지하며 말줄임(…), 음력은 고정 폭으로 항상 온전히 표시
                         Text(
                             station.name,
                             style = TextStyle(color = white, fontSize = fs(14f), fontWeight = FontWeight.Bold),
-                            maxLines = 1
+                            maxLines = 1,
+                            modifier = GlanceModifier.defaultWeight()
                         )
                         Text(
                             " · 음력 ${m.lunarMonth}.${m.lunarDay}",
                             style = TextStyle(color = sub, fontSize = fs(12f)),
                             maxLines = 1
                         )
+                        Spacer(GlanceModifier.width(6.dp))
                     }
                     Text(
                         "${m.number}물",
