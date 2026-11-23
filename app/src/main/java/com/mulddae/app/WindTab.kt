@@ -215,7 +215,8 @@ fun WindTabContent(info: ObsInfo?, loading: Boolean, error: String?, isToday: Bo
             if (d != null) {
                 val x = lp + plotW * (hr / 24f)
                 val c = windColor(w ?: 0.0)
-                drawPlane(d, c, ps, x, size.height / 2f)
+                // 비행기 그림의 시각적 중심이 원점보다 오른쪽(약 +3.35/28)이라 눈금선에 맞게 왼쪽으로 보정
+                drawPlane(d, c, ps, x - ps * 3.35f / 28f, size.height / 2f)
             }
         }
     }
