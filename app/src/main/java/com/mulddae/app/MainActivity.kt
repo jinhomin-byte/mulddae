@@ -40,9 +40,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            // 글꼴 배율은 따르되 최대 1.15배까지만 반영(카드 넘침·글자 잘림 방지)
+            val dens = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                    dens.density, dens.fontScale.coerceAtMost(1.15f)
+                )
+            ) {
             var theme by remember { mutableIntStateOf(loadTheme(this@MainActivity)) }
             AppTheme(theme) {
                 TideScreen(theme) { theme = it; saveTheme(this@MainActivity, it) }
+            }
             }
         }
     }
@@ -61,6 +69,31 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
     var station by remember { mutableStateOf(TideRepository.selectedStation(ctx)) }
     // 가운데 점선이 가리키는 시각. 그래프를 끌면 바뀐다.
     var viewTime by remember { mutableStateOf(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)) }
+    // 자정을 넘기거나 앱에 복귀했을 때 날짜가 바뀌었으면 '오늘'을 다시 계산한다(오늘을 보고 있었다면 새 오늘로 이동).
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    val viewTimeRef = rememberUpdatedState(viewTime)
+    val checkToday = {
+        val now = LocalDate.now()
+        if (now != today) {
+            if (viewTimeRef.value.toLocalDate() == today) viewTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
+            today = now
+        }
+    }
+    val checkTodayRef = rememberUpdatedState(checkToday)
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000L - (System.currentTimeMillis() % 60_000L) + 50L)
+            checkTodayRef.value()
+        }
+    }
+    DisposableEffect(ctx) {
+        val lc = (ctx as? ComponentActivity)?.lifecycle
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_START) checkTodayRef.value()
+        }
+        lc?.addObserver(obs)
+        onDispose { lc?.removeObserver(obs) }
+    }
     var yearData by remember(station.code) { mutableStateOf<Map<Int, List<TideEvent>>>(emptyMap()) }
     val noData = remember(station.code) { HashSet<Int>() } // 데이터 없음이 확인된 미래 연도(이번 실행 동안만)
     var forceNext by remember { mutableStateOf(false) }
@@ -105,12 +138,12 @@ fun TideScreen(themeIndex: Int = 0, onThemeSelect: (Int) -> Unit = {}) {
     var curHasPair by remember(station.code) { mutableStateOf(CurrentRepository.cachedHasPair(ctx, station.code)) }
     val curReq = remember { IntArray(1) } // 가장 최근에 시작한 불러오기 번호(이전 효과가 로딩 표시를 끄지 못하게)
     var forceCur by remember { mutableStateOf(false) }
-    val curInRange = !obsDate.isBefore(LocalDate.now().minusDays(1)) && !obsDate.isAfter(LocalDate.now().plusDays(6))
-    LaunchedEffect(station.code, tick, obsDate) {
+    val curInRange = !obsDate.isBefore(today.minusDays(1)) && !obsDate.isAfter(today.plusDays(6))
+    LaunchedEffect(station.code, tick, obsDate, today) {
         val force = forceCur
         forceCur = false
         if (!curInRange && curDay != null) return@LaunchedEffect
-        val q = if (curInRange) obsDate else LocalDate.now()
+        val q = if (curInRange) obsDate else today
         val myReq = ++curReq[0]
         curLoading = true
         try {
